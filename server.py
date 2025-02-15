@@ -77,8 +77,6 @@ def notify_user_payment_canceled(chat_id):
         print(f"Errore durante la notifica dell'utente {chat_id}: {e}")
 from flask import Flask
 
-app = Flask(__name__)
-
 @app.route('/')
 def home():
     return "Server attivo!"
