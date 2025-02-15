@@ -292,8 +292,8 @@ def pay_with_paypal(message):
        "payer": {"payment_method": "paypal"},
        "redirect_urls": {
            # MODIFICA QUESTE RIGHE: Sostituisci con il tuo dominio pubblico (ad es. da Render.com)
-           "return_url": "https://nome-app.onrender.com/payment/execute",
-           "cancel_url": "https://nome-app.onrender.com/payment/cancel"
+           "return_url": "https://paypal-server-bafg.onrender.com/payment/execute",
+           "cancel_url": "https://paypal-server-bafg.onrender.com/payment/cancel"
        },
        "transactions": [{
            "item_list": {
