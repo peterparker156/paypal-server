@@ -75,6 +75,9 @@ def notify_user_payment_canceled(chat_id):
         bot.send_message(chat_id, "Il pagamento è stato annullato. Puoi riprovare quando vuoi.")
     except Exception as e:
         print(f"Errore durante la notifica dell'utente {chat_id}: {e}")
+@app.route('/')
+def home():
+    return "Benvenuto al tuo servizio!"
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
