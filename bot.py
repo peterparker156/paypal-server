@@ -15,7 +15,7 @@ bot = telebot.TeleBot(API_TOKEN)
 # Configurazione di Google Drive
 SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # Percorso al file JSON dell'account di servizio
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-FOLDER_ID = "1--TOQVt0viBsnRLWto8m9EPKUkCT62om"
+FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
 # Dizionari per i dati utente e per il mapping payment_id -> chat_id
 user_data = {}
