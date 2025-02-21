@@ -13,7 +13,7 @@ API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Configurazione di Google Drive
-SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # Percorso al file JSON dell'account di servizio
+SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servizio
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
@@ -21,17 +21,18 @@ FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 user_data = {}
 orders_mapping = {}  # Mapping per associare payment_id a chat_id (usato per PayPal)
 
-# Configurazione di PayPal (sostituisci i placeholder con le tue credenziali)
+###############################################
+# CONFIGURAZIONE PAYPAL (modalità live)
+###############################################
 paypalrestsdk.configure({
-    "mode": "sandbox",  # Usa "live" in produzione
-    "client_id": "AV8r1YLihN5v98tdc6Tloq3tKxJvYikJtSiex4LhCVPzZRO3G7AVE2ZcIsItJhvN-1pPJj6DQ0WOA33N",
-    "client_secret": "EHoz2yWbe9HblmXhCG_OjHtHiKBtkzy16rl50QY3epFsPqL8j8LhkZC4_Zh0ffmBqPSH59hxLu6w1cQB"
+    "mode": "live",  # Ambiente live
+    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
+    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
 ###############################################
 # FUNZIONI DI SUPPORTO
 ###############################################
-
 def init_user_data(chat_id):
     """Inizializza i dati per l'utente se non esistono."""
     if chat_id not in user_data:
@@ -42,7 +43,7 @@ def init_user_data(chat_id):
         }
 
 def get_service():
-    """Crea e restituisce un servizio Drive autenticato tramite l'account di servizio."""
+    """Crea un servizio Google Drive autenticato."""
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
@@ -64,7 +65,7 @@ def get_or_create_user_folder(service, username):
         return folder.get('id')
 
 def upload_to_drive(file_path, chat_id):
-    """Carica il file su Google Drive nella cartella specifica dell'utente."""
+    """Carica il file su Google Drive nella cartella dell'utente."""
     try:
         service = get_service()
         chat = bot.get_chat(chat_id)
@@ -92,7 +93,6 @@ def send_service_selection(chat_id):
 ###############################################
 # HANDLER DEL BOT
 ###############################################
-
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
@@ -118,8 +118,7 @@ def go_back(message):
 
 @bot.message_handler(func=lambda message: message.text in ["Economico", "Standard", "Urgente"])
 def select_delivery(message):
-    """Permette la scelta della modalità di consegna.
-    Se nessun servizio è stato selezionato, non consente di procedere."""
+    """Permette la scelta della modalità di consegna (se è stato selezionato un servizio)."""
     chat_id = message.chat.id
     init_user_data(chat_id)
     if user_data[chat_id]['current_service'] is None:
@@ -140,8 +139,7 @@ def format_duration(hours, minutes, seconds):
 
 @bot.message_handler(func=lambda message: ':' in message.text)
 def insert_duration(message):
-    """L'utente inserisce la durata e viene calcolato il prezzo.
-    Se non è stato selezionato un servizio, l'operazione viene bloccata."""
+    """L'utente inserisce la durata; viene calcolato il prezzo e attivato l'invio del file."""
     chat_id = message.chat.id
     init_user_data(chat_id)
     if user_data[chat_id]['current_service'] is None:
@@ -168,7 +166,6 @@ def process_file(chat_id):
         return
     if current.get('multiple_files', False):
         return
-
     bot.send_message(chat_id, "Il file sta venendo caricato, attendi qualche secondo...")
     file_doc = current['file_message']
     file_path = f"./{file_doc.file_name}"
@@ -191,14 +188,13 @@ def process_file(chat_id):
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
-    """Gestisce l'invio del file controllando se è richiesto e se non viene inviato più di uno."""
+    """Gestisce l'invio del file (assicurandosi che venga inviato un solo file)."""
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
     if current is None or not current.get('file_requested', False):
         bot.send_message(chat_id, "⚠️ In questo momento non è richiesto l'invio di un file.")
         return
-
     if 'file_message' in current:
         if current['file_message'].file_id == message.document.file_id:
             return
@@ -211,7 +207,6 @@ def handle_document(message):
             bot.send_message(chat_id, "⚠️ Hai inviato più di un file. Invia un solo file per favore.")
             current.pop('file_message', None)
             return
-
     current['file_message'] = message.document
     current['multiple_files'] = False
     timer = threading.Timer(3.0, process_file, args=(chat_id,))
@@ -257,27 +252,45 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service['delivery']}\n   ⏳ {service['duration']} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Pulsanti per pagare o concludere l'ordine
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "✔️ Concludi")
+    # Mostriamo i pulsanti per pagare o annullare l'ordine
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
+    """
+    Mostra il riepilogo finale dell'ordine e offre due pulsanti:
+    - "💳 Paga con PayPal" per procedere al pagamento.
+    - "❌ Annulla Ordine" per cancellare l'ordine.
+    L'ordine non viene resettato finché l'utente non sceglie esplicitamente di pagare o annullare.
+    """
     chat_id = message.chat.id
     init_user_data(chat_id)
     total_price = sum(s['price'] for s in user_data[chat_id]['services'])
+    if total_price == 0:
+        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
+        send_service_selection(chat_id)
+        return
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service['delivery']}\n   ⏳ {service['duration']} → 💰 €{service['price']:.2f}\n"
-    text += f"\n💰 Totale: €{total_price:.2f}\n🙏 Grazie! Premi /start per un nuovo ordine."
-    bot.send_message(chat_id, text, parse_mode='Markdown')
+    text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
+    bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
+def cancel_order(message):
+    """Annulla l'ordine e resetta i dati utente."""
+    chat_id = message.chat.id
+    init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+    bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
 ###############################################
 # HANDLER PER IL PAGAMENTO CON PAYPAL
 ###############################################
-
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
@@ -287,11 +300,11 @@ def pay_with_paypal(message):
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
 
+    # Creazione del pagamento con PayPal
     payment = paypalrestsdk.Payment({
        "intent": "sale",
        "payer": {"payment_method": "paypal"},
        "redirect_urls": {
-           # MODIFICA QUESTE RIGHE: Sostituisci con il tuo dominio pubblico (ad es. da Render.com)
            "return_url": "https://paypal-server-bafg.onrender.com/payment/execute",
            "cancel_url": "https://paypal-server-bafg.onrender.com/payment/cancel"
        },
@@ -314,11 +327,10 @@ def pay_with_paypal(message):
     })
 
     if payment.create():
-        # Salva il mapping payment_id -> chat_id per l'integrazione PayPal
         orders_mapping[payment.id] = chat_id
         approval_url = None
         for link in payment.links:
-            if link.method == "REDIRECT":
+            if link.rel == "approval_url":
                 approval_url = str(link.href)
                 break
         if approval_url:
