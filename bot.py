@@ -17,10 +17,10 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – per produzione, usa un database)
+# Dati utente (in memoria – per produzione usare un DB)
 user_data = {}
 
-# Mapping per associare payment.id al chat_id
+# Mapping: payment.id -> chat_id
 orders_mapping = {}
 
 ###############################################
@@ -37,12 +37,7 @@ paypalrestsdk.configure({
 ###############################################
 def init_user_data(chat_id):
     if chat_id not in user_data:
-        user_data[chat_id] = {
-            'services': [],
-            'current_service': None,
-            'order_id': None,
-            'mode': 'normal'
-        }
+        user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
 
 def get_service():
     creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
@@ -161,7 +156,6 @@ def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id]['current_service'] = {'name': message.text}
-    # Genera un nuovo order_id per l'ordine corrente
     user_data[chat_id]['order_id'] = str(uuid.uuid4())
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     if message.text == "📚 Lezioni":
@@ -226,7 +220,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Reset dell'ordine corrente: l'utente dovrà cliccare "✔️ Concludi" per procedere al pagamento
+        # Reset dell'ordine corrente: l'utente deve cliccare "✔️ Concludi" per procedere al pagamento
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
@@ -369,7 +363,6 @@ def pay_with_paypal(message):
     print("Creazione pagamento...")
     if payment.create():
         print("Pagamento creato, payment.id =", payment.id)
-        # Salviamo il mapping per recuperare il chat_id nel server
         orders_mapping[payment.id] = chat_id
         approval_url = None
         for link in payment.links:
