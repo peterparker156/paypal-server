@@ -17,7 +17,7 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – per produzione valutare l’uso di un database)
+# Dati utente (in memoria – per produzione si può usare un DB)
 user_data = {}
 
 ###############################################
@@ -68,7 +68,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (non includono i tasti per il pagamento)
+    # Tasti standard (senza i tasti per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -219,7 +219,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Ordine completato: resettiamo current_service
+        # L'ordine corrente è ora completo: l'utente dovrà cliccare "✔️ Concludi" per procedere al pagamento
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
@@ -295,7 +295,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra i tasti standard (per selezionare servizi, rimuovere, ecc.)
+    # Mostra i tasti standard (senza quelli per il pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
