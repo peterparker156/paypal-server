@@ -1,5 +1,4 @@
-# server.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, redirect, url_for, jsonify
 import paypalrestsdk
 
 # Dizionario globale per mappature payment_id -> chat_id
@@ -8,11 +7,11 @@ orders_mapping = {}
 # Inizializza l'app Flask
 app = Flask(__name__)
 
-# Configura il PayPal SDK (usa le tue credenziali)
+# Configura il PayPal SDK in modalità live (stesse credenziali del bot)
 paypalrestsdk.configure({
-    "mode": "sandbox",  # Cambia in "live" in produzione
-    "client_id": "AV8r1YLihN5v98tdc6Tloq3tKxJvYikJtSiex4LhCVPzZRO3G7AVE2ZcIsItJhvN-1pPJj6DQ0WOA33N",
-    "client_secret": "EHoz2yWbe9HblmXhCG_OjHtHiKBtkzy16rl50QY3epFsPqL8j8LhkZC4_Zh0ffmBqPSH59hxLu6w1cQB"
+    "mode": "live",  # Ambiente live
+    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
+    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
 @app.route('/payment/execute', methods=['GET'])
@@ -75,10 +74,11 @@ def notify_user_payment_canceled(chat_id):
         bot.send_message(chat_id, "Il pagamento è stato annullato. Puoi riprovare quando vuoi.")
     except Exception as e:
         print(f"Errore durante la notifica dell'utente {chat_id}: {e}")
-from flask import Flask
 
 @app.route('/')
 def home():
     return "Server attivo!"
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
