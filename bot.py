@@ -17,7 +17,7 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – per produzione si può usare un DB)
+# Dati utente (in memoria – per produzione valutare un DB)
 user_data = {}
 
 ###############################################
@@ -37,7 +37,8 @@ def init_user_data(chat_id):
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
 
 def get_service():
-    creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def get_or_create_user_folder(service, username):
@@ -47,7 +48,11 @@ def get_or_create_user_folder(service, username):
     if items:
         return items[0]['id']
     else:
-        file_metadata = {'name': username, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [FOLDER_ID]}
+        file_metadata = {
+            'name': username,
+            'mimeType': 'application/vnd.google-apps.folder',
+            'parents': [FOLDER_ID]
+        }
         folder = service.files().create(body=file_metadata, fields='id').execute()
         return folder.get('id')
 
@@ -68,7 +73,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (senza i tasti per il pagamento)
+    # Tasti standard (non includono quelli per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -219,7 +224,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # L'ordine corrente è ora completo: l'utente dovrà cliccare "✔️ Concludi" per procedere al pagamento
+        # Reset dell'ordine corrente: l'utente dovrà cliccare "✔️ Concludi" per procedere al pagamento
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
@@ -295,7 +300,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra i tasti standard (senza quelli per il pagamento)
+    # Mostra i tasti standard (per selezionare servizi, rimuovere, ecc.)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -309,7 +314,7 @@ def conclude_order(message):
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
         send_service_selection(chat_id)
         return
-    # Usa l'order_id generato in precedenza (già salvato in select_service)
+    # Usa l'order_id generato in precedenza
     order_id = user_data[chat_id].get('order_id', str(uuid.uuid4()))
     user_data[chat_id]['order_id'] = order_id
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
