@@ -58,7 +58,13 @@ def execute_payment():
         ''', 200
     else:
         logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-        return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
+        # Estrae un messaggio d'errore più specifico se disponibile
+        error_msg = ""
+        if isinstance(payment.error, dict):
+            error_msg = payment.error.get("message", str(payment.error))
+        else:
+            error_msg = str(payment.error)
+        return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
@@ -69,7 +75,6 @@ def paypal_webhook():
     event_body = request.get_json()
     if not event_body:
         return jsonify({'error': 'No data received'}), 400
-
     event_type = event_body.get('event_type')
     logging.debug("Webhook ricevuto: event_type=%s", event_type)
     if event_type == "PAYMENT.SALE.COMPLETED":
