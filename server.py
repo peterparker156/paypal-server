@@ -27,7 +27,7 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        # Se il pagamento non è già processato, eseguiamo l'execute
+        # Se il pagamento non è già completato, proviamo a eseguirlo
         if payment.state not in ["approved", "completed"]:
             if callable(payment.execute):
                 if not payment.execute({"payer_id": payer_id}):
@@ -40,9 +40,11 @@ def execute_payment():
         else:
             logging.debug("Pagamento già processato (stato: %s)", payment.state)
         logging.debug("Pagamento eseguito correttamente")
-        custom_field = payment.transactions[0].get("custom")
-        if not custom_field:
-            logging.debug("Campo custom mancante: pagamento già processato.")
+        # Recuperiamo il chat_id dal mapping
+        from bot import orders_mapping
+        chat_id = orders_mapping.pop(payment.id, None)
+        if not chat_id:
+            logging.warning("Mapping non trovato per payment.id %s; campo custom mancante?", payment.id)
             return '''
             <html>
                 <head>
@@ -58,12 +60,6 @@ def execute_payment():
                 </body>
             </html>
             ''', 200
-        try:
-            chat_id = int(custom_field)
-            logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
-        except Exception as e:
-            logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
-            return f"Errore nel recupero delle informazioni dell'ordine: {e}", 500
         notify_user_payment_success(chat_id)
         return '''
         <html>
@@ -101,8 +97,10 @@ def paypal_webhook():
         payment_id = resource.get('parent_payment')
         try:
             payment = paypalrestsdk.Payment.find(payment_id)
-            chat_id = int(payment.transactions[0].get("custom"))
-            notify_user_payment_success(chat_id)
+            from bot import orders_mapping
+            chat_id = orders_mapping.pop(payment.id, None)
+            if chat_id:
+                notify_user_payment_success(chat_id)
         except Exception as e:
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
@@ -110,13 +108,9 @@ def paypal_webhook():
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
-    # Se per qualche motivo il chat_id non è già presente, inizializzalo
-    if chat_id not in user_data:
-        user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo completamente i dati dell'ordine per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
