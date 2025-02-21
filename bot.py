@@ -1,6 +1,5 @@
 import os
 import threading
-import time
 import telebot
 from telebot import types
 from google.oauth2 import service_account
@@ -17,14 +16,14 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – in produzione si può usare un database)
+# Dati utente in memoria (per produzione valutare un database)
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",  
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -47,11 +46,7 @@ def get_or_create_user_folder(service, username):
     if items:
         return items[0]['id']
     else:
-        file_metadata = {
-            'name': username,
-            'mimeType': 'application/vnd.google-apps.folder',
-            'parents': [FOLDER_ID]
-        }
+        file_metadata = {'name': username, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [FOLDER_ID]}
         folder = service.files().create(body=file_metadata, fields='id').execute()
         return folder.get('id')
 
@@ -72,7 +67,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (non includono i tasti per pagamento)
+    # Tasti standard (senza i tasti per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -194,7 +189,6 @@ def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
-    # La durata è consentita solo se la modalità di consegna è stata selezionata
     if current is None or "delivery" not in current:
         bot.send_message(chat_id, "⚠️ Non è richiesta l'inserimento della durata in questo momento.")
         return
@@ -229,7 +223,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Ordine completato: resettiamo current_service e inviamo notifica
+        # Ordine completato: resettiamo l'ordine
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora puoi iniziare un nuovo ordine.")
         send_service_selection(chat_id)
@@ -305,7 +299,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra solo i tasti standard (tutti tranne quelli di pagamento)
+    # Mostra solo i tasti standard (senza quelli di pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
