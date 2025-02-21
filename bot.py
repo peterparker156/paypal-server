@@ -17,14 +17,14 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servi
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dizionario per i dati utente (in memoria; per la produzione valutare un DB)
+# Dizionario per i dati utente (in memoria)
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  # Usa "live" per la produzione
+    "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -135,7 +135,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# HANDLER DEL BOT (Telegram)
+# HANDLER DEL BOT
 ###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -201,8 +201,9 @@ def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
+    # La durata può essere inserita solo se è stata richiesta (cioè, se è stato impostato 'delivery')
     if current is None or "delivery" not in current:
-        bot.send_message(chat_id, "⚠️ Seleziona la modalità di consegna prima di inserire la durata.")
+        bot.send_message(chat_id, "⚠️ Non è richiesta l'inserimento della durata in questo momento.")
         return
     try:
         hours, minutes, seconds = map(int, message.text.split(':'))
@@ -309,10 +310,9 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra TUTTI i bottoni per gestire l'ordine
+    # Solo in questo riepilogo finale, i bottoni disponibili sono "💳 Paga con PayPal" e "❌ Annulla Ordine"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo",
-               "❌ Rimuovi un servizio", "✔️ Concludi", "💳 Paga con PayPal", "❌ Annulla Ordine")
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
@@ -328,8 +328,9 @@ def conclude_order(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
+    # Mostra SOLO i bottoni "💳 Paga con PayPal" e "❌ Annulla Ordine"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine", "📋 Riepilogo", "📚 Lezioni", "🎙 Podcast", "🎤 Conferenze")
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
@@ -337,7 +338,7 @@ def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
-    bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
+    bot.send_message(chat_id, "❌ Ordine annullato. L'ordine è stato resettato. Premi /start per iniziare un nuovo ordine.")
 
 ###############################################
 # HANDLER PER IL PAGAMENTO CON PAYPAL
