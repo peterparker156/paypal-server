@@ -18,23 +18,17 @@ def execute_payment():
     payment_id = request.args.get('paymentId')
     payer_id = request.args.get('PayerID')
     logging.debug("Esecuzione pagamento: paymentId=%s, PayerID=%s", payment_id, payer_id)
-    
     if not payment_id or not payer_id:
         return "Errore: Mancano i parametri necessari", 400
-
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
         logging.debug("Payment trovato: %s", payment.id)
     except Exception as e:
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
-
     try:
-        # Se il pagamento è già stato processato, non lo rieseguiamo
-        if payment.state in ["approved", "completed"]:
-            logging.debug("Pagamento già processato (stato: %s)", payment.state)
-        else:
-            # Verifichiamo se il metodo execute è callable (in alcuni casi potrebbe non esserlo)
+        # Se il pagamento non è già processato, eseguiamo l'execute
+        if payment.state not in ["approved", "completed"]:
             if callable(payment.execute):
                 if not payment.execute({"payer_id": payer_id}):
                     logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
@@ -43,12 +37,12 @@ def execute_payment():
                     return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
             else:
                 logging.debug("payment.execute non callable; assumo pagamento già processato.")
-        
-        logging.debug("Pagamento eseguito correttamente, stato: %s", payment.state)
-        # Recupera il campo custom (che dovrebbe contenere il chat_id)
+        else:
+            logging.debug("Pagamento già processato (stato: %s)", payment.state)
+        logging.debug("Pagamento eseguito correttamente")
         custom_field = payment.transactions[0].get("custom")
         if not custom_field:
-            logging.debug("Campo custom mancante: pagamento già processato?")
+            logging.debug("Campo custom mancante: pagamento già processato.")
             return '''
             <html>
                 <head>
@@ -64,14 +58,12 @@ def execute_payment():
                 </body>
             </html>
             ''', 200
-        
         try:
             chat_id = int(custom_field)
             logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
         except Exception as e:
             logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
             return f"Errore nel recupero delle informazioni dell'ordine: {e}", 500
-
         notify_user_payment_success(chat_id)
         return '''
         <html>
@@ -89,7 +81,6 @@ def execute_payment():
             </body>
         </html>
         ''', 200
-
     except Exception as ex:
         logging.error("Eccezione durante l'esecuzione del pagamento: %s", ex)
         return f"Eccezione durante l'esecuzione del pagamento: {ex}", 500
@@ -119,11 +110,14 @@ def paypal_webhook():
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
+    # Se per qualche motivo il chat_id non è già presente, inizializzalo
+    if chat_id not in user_data:
+        user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo i dati dell'ordine per questa chat
-        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+        # Resettiamo completamente i dati dell'ordine per questa chat
+        user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
