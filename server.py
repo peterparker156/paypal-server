@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live (stesse credenziali usate nel bot)
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -89,7 +89,7 @@ from bot import bot, user_data
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Puoi iniziare un nuovo ordine.")
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
@@ -102,5 +102,6 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
