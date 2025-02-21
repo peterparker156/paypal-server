@@ -17,7 +17,7 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – per produzione valutare l’uso di un DB)
+# Dati utente (in memoria)
 user_data = {}
 
 ###############################################
@@ -68,7 +68,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (non includono quelli per il pagamento)
+    # Tasti standard (senza i tasti per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -219,7 +219,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # L'ordine corrente è ora completo: l'utente dovrà cliccare "✔️ Concludi" per passare al pagamento
+        # L'ordine è completato: ora l'utente dovrà cliccare "✔️ Concludi" per procedere al pagamento
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
@@ -295,7 +295,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra i tasti standard (quelli per aggiungere/rimuovere servizi e concludere)
+    # Mostra i tasti standard (tasti per selezionare servizi, rimuovere, concludere, ecc.)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -309,14 +309,14 @@ def conclude_order(message):
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
         send_service_selection(chat_id)
         return
-    # Genera un nuovo order_id per questo ordine
-    order_id = str(uuid.uuid4())
+    # Usa l'order_id generato in precedenza
+    order_id = user_data[chat_id].get('order_id', str(uuid.uuid4()))
     user_data[chat_id]['order_id'] = order_id
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
-    # Mostra SOLO i tasti per il pagamento
+    # Mostra SOLO i tasti "💳 Paga con PayPal" e "❌ Annulla Ordine"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -325,7 +325,6 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    # Resettiamo completamente i dati dell'ordine per questa chat
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     bot.send_message(chat_id, "❌ Ordine annullato e resettato. Premi /start per iniziare un nuovo ordine.")
 
@@ -340,7 +339,6 @@ def pay_with_paypal(message):
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
-    # Usa l'order_id generato in "concludi"; se non presente, usa il chat_id come fallback
     order_id = user_data[chat_id].get('order_id', str(chat_id))
     payment = paypalrestsdk.Payment({
        "intent": "sale",
