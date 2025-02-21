@@ -28,7 +28,7 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        # Se il pagamento è già stato eseguito, non rieseguo l'esecuzione
+        # Se il pagamento non è ancora completato, tentiamo di eseguirlo
         if payment.state not in ["approved", "completed"]:
             if not payment.execute({"payer_id": payer_id}):
                 logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
@@ -37,15 +37,14 @@ def execute_payment():
         else:
             logging.debug("Pagamento già eseguito; uso i dati esistenti.")
         logging.debug("Pagamento eseguito correttamente")
-        # Se il campo custom è mancante, significa che il pagamento è già stato processato
         custom_field = payment.transactions[0].get("custom")
         if not custom_field:
-            logging.debug("Campo custom mancante, pagamento già processato. Ritorno conferma.")
+            logging.debug("Campo custom mancante, pagamento già processato.")
             return '''
             <html>
                 <head>
                     <meta charset="utf-8">
-                    <title>Pagamento Confermato</title>
+                    <title>Pagamento già confermato</title>
                 </head>
                 <body style="text-align: center; margin-top: 50px;">
                     <h1>Pagamento già confermato!</h1>
@@ -111,7 +110,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo completamente i dati dell'ordine per questa chat
+        # Reset dell'ordine per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
@@ -122,4 +121,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
