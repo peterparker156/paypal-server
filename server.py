@@ -102,7 +102,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # (Opzionale) Resetta i dati dell'ordine
+        # Resetta i dati dell'ordine (opzionale)
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
