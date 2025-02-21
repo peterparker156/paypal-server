@@ -1,5 +1,9 @@
 from flask import Flask, request, redirect, url_for, jsonify
 import paypalrestsdk
+import logging
+
+# Configura il logging per il server
+logging.basicConfig(level=logging.DEBUG)
 
 # Dizionario globale per mappature payment_id -> chat_id
 orders_mapping = {}
@@ -17,18 +21,24 @@ paypalrestsdk.configure({
 def execute_payment():
     payment_id = request.args.get('paymentId')
     payer_id = request.args.get('PayerID')
+    logging.debug("Esecuzione pagamento: paymentId=%s, PayerID=%s", payment_id, payer_id)
     if not payment_id or not payer_id:
         return "Errore: Mancano i parametri necessari", 400
 
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
+        logging.debug("Pagamento trovato: %s", payment.id)
     except Exception as e:
+        logging.error("Errore nel recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
 
     if payment.execute({"payer_id": payer_id}):
+        logging.debug("Pagamento eseguito correttamente")
         chat_id = orders_mapping.get(payment_id)
         if chat_id:
             notify_user_payment_success(chat_id)
+        else:
+            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
         # Ritorna una pagina HTML con un pulsante per tornare al bot
         return '''
         <html>
@@ -46,6 +56,7 @@ def execute_payment():
         </html>
         ''', 200
     else:
+        logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
         return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
@@ -63,6 +74,7 @@ def paypal_webhook():
         return jsonify({'error': 'No data received'}), 400
 
     event_type = event_body.get('event_type')
+    logging.debug("Webhook ricevuto: event_type=%s", event_type)
     if event_type == "PAYMENT.SALE.COMPLETED":
         resource = event_body.get('resource', {})
         payment_id = resource.get('parent_payment')
@@ -76,20 +88,20 @@ from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
     try:
-        # Invia un messaggio al bot per notificare l'esito positivo del pagamento
+        logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Resetta i dati dell'ordine, se desiderato
+        # Reset dei dati dell'ordine (opzionale)
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
     except Exception as e:
-        print(f"Errore durante la notifica dell'utente {chat_id}: {e}")
+        logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
 def notify_user_payment_canceled(chat_id):
     try:
         bot.send_message(chat_id, "Il pagamento è stato annullato. Puoi riprovare quando vuoi.")
     except Exception as e:
-        print(f"Errore durante la notifica dell'utente {chat_id}: {e}")
+        logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
 @app.route('/')
 def home():
@@ -98,3 +110,4 @@ def home():
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
 
+       
