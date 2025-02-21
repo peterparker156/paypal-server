@@ -66,7 +66,7 @@ def execute_payment():
                 error_msg = str(payment.error)
             return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
     except Exception as ex:
-        logging.error("Eccezione durante l'esecuzione: %s", ex)
+        logging.error("Eccezione durante l'esecuzione del pagamento: %s", ex)
         return f"Eccezione durante l'esecuzione del pagamento: {ex}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
@@ -91,7 +91,6 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
-# Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
