@@ -4,12 +4,11 @@ import paypalrestsdk
 # Dizionario globale per mappature payment_id -> chat_id
 orders_mapping = {}
 
-# Inizializza l'app Flask
 app = Flask(__name__)
 
 # Configura il PayPal SDK in modalità live (stesse credenziali usate nel bot)
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -39,8 +38,8 @@ def execute_payment():
             </head>
             <body style="text-align: center; margin-top: 50px;">
                 <h1>Pagamento confermato!</h1>
-                <p>Il tuo pagamento è stato eseguito con successo.</p>
-                <a href="https://t.me/Appuntiperfettibot" target="_blank">
+                <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
+                <a href="https://t.me/IlTuoBot" target="_blank">
                     <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
                 </a>
             </body>
@@ -72,13 +71,14 @@ def paypal_webhook():
             notify_user_payment_success(chat_id)
     return jsonify({'status': 'success'}), 200
 
-# Importa il bot e la struttura dei dati dal file bot.py
+# Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
     try:
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. Grazie per l'acquisto!")
-        # Puoi resettare i dati dell'ordine, se lo desideri:
+        # Invia un messaggio di conferma all'utente tramite il bot
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # Se vuoi resettare l'ordine dopo il pagamento, puoi farlo qui:
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
