@@ -1,8 +1,6 @@
-
-from flask import Flask, request, jsonify
+from flask import Flask, request, redirect, jsonify
 import paypalrestsdk
 import logging
-import threading
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -25,8 +23,7 @@ def execute_payment():
 
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
-        payment_dict = payment.to_dict()
-        logging.debug("Payment object: %s", payment_dict)
+        logging.debug("Payment object: %s", payment.to_dict())
     except Exception as e:
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
@@ -40,11 +37,12 @@ def execute_payment():
             logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
         except Exception as e:
             logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
+        # Costruiamo il link di reindirizzamento verso /redirect
         if chat_id:
-            notify_user_payment_success(chat_id)
+            redirect_link = f"https://paypal-server-bafg.onrender.com/redirect?chat_id={chat_id}"
         else:
-            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
-        return '''
+            redirect_link = "https://t.me/AppuntiPerfettiBot"
+        return f'''
         <html>
             <head>
                 <meta charset="utf-8">
@@ -53,7 +51,7 @@ def execute_payment():
             <body style="text-align: center; margin-top: 50px;">
                 <h1>Pagamento confermato!</h1>
                 <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
-                <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
+                <a href="{redirect_link}" target="_blank">
                     <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
                 </a>
             </body>
@@ -63,9 +61,19 @@ def execute_payment():
         logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
         return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
 
+@app.route('/redirect', methods=['GET'])
+def redirect_to_bot():
+    chat_id = request.args.get('chat_id')
+    if chat_id:
+        try:
+            chat_id = int(chat_id)
+            notify_user_payment_success(chat_id)
+        except Exception as e:
+            logging.error("Errore nel parsing del chat_id: %s", e)
+    return redirect("https://t.me/AppuntiPerfettiBot")
+
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
-    # Puoi aggiungere una notifica di cancellazione qui se vuoi
     return "Pagamento annullato", 200
 
 @app.route('/webhook', methods=['POST'])
@@ -87,8 +95,8 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
-# Importa il bot e i dati dal file bot.py
-from bot import bot, user_data
+# Importa il bot e i dati dal modulo telegram_bot
+from telegram_bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
     try:
@@ -106,11 +114,6 @@ def home():
     return "Server attivo!"
 
 if __name__ == '__main__':
-    # Avvia il bot in un thread separato
-    bot_thread = threading.Thread(target=bot.polling, kwargs={'none_stop': True})
-    bot_thread.start()
-
-    # Avvia il server Flask
     app.run(debug=True, host='0.0.0.0', port=5000)
 
        
