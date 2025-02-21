@@ -28,42 +28,45 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        if payment.execute({"payer_id": payer_id}):
-            logging.debug("Pagamento eseguito correttamente")
-            chat_id = None
-            try:
-                chat_id = int(payment.transactions[0].get("custom"))
-                logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
-            except Exception as e:
-                logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
-            if chat_id:
-                notify_user_payment_success(chat_id)
-            else:
-                logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
-            return '''
-            <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Pagamento Confermato</title>
-                </head>
-                <body style="text-align: center; margin-top: 50px;">
-                    <h1>Pagamento confermato!</h1>
-                    <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
-                    <p>Se il pulsante non funziona, copia questo link: https://t.me/AppuntiPerfettiBot</p>
-                    <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
-                        <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
-                    </a>
-                </body>
-            </html>
-            ''', 200
+        # Se il pagamento è già stato eseguito, non lo rieseguo
+        if payment.state in ["approved", "completed"]:
+            logging.debug("Pagamento già eseguito; non rieseguo l'esecuzione.")
         else:
-            logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-            error_msg = ""
-            if isinstance(payment.error, dict):
-                error_msg = payment.error.get("message", str(payment.error))
-            else:
-                error_msg = str(payment.error)
-            return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
+            if not payment.execute({"payer_id": payer_id}):
+                logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
+                error_msg = ""
+                if isinstance(payment.error, dict):
+                    error_msg = payment.error.get("message", str(payment.error))
+                else:
+                    error_msg = str(payment.error)
+                return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
+        logging.debug("Pagamento eseguito correttamente")
+        chat_id = None
+        try:
+            chat_id = int(payment.transactions[0].get("custom"))
+            logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
+        except Exception as e:
+            logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
+        if chat_id:
+            notify_user_payment_success(chat_id)
+        else:
+            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
+        return '''
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Pagamento Confermato</title>
+            </head>
+            <body style="text-align: center; margin-top: 50px;">
+                <h1>Pagamento confermato!</h1>
+                <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
+                <p>Se il pulsante non funziona, copia questo link: https://t.me/AppuntiPerfettiBot</p>
+                <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
+                    <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
+                </a>
+            </body>
+        </html>
+        ''', 200
     except Exception as ex:
         logging.error("Eccezione durante l'esecuzione del pagamento: %s", ex)
         return f"Eccezione durante l'esecuzione del pagamento: {ex}", 500
@@ -96,7 +99,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo completamente i dati per questa chat
+        # Resettiamo completamente i dati dell'ordine per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
