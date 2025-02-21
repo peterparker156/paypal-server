@@ -1,6 +1,7 @@
 import os
 import threading
 import telebot
+import uuid
 from telebot import types
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -16,14 +17,14 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente in memoria (per produzione valutare un database)
+# Dati utente (in memoria)
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -67,7 +68,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (senza i tasti per il pagamento)
+    # Tasti standard (non includono i tasti per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -131,26 +132,19 @@ def welcome(message):
     init_user_data(chat_id)
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
-        "Hai bisogno di trascrivere lezioni universitarie, corsi, conferenze o altri contenuti audio? "
-        "Appunti Perfetti ti offre trascrizioni rapide, precise e a prezzi vantaggiosi.\n\n"
-        "Cosa facciamo:\n"
-        "🔹 Lezioni universitarie e corsi\n"
-        "🔹 Podcast e interviste\n"
-        "🔹 Conferenze e webinar\n\n"
-        "Prezzi:\n"
-        "● Lezioni Universitarie e Corsi\n"
-        "   Economico: €0,25/min (1 settimana) | Standard: €0,40/min (48 ore) | Urgente: €0,60/min (24 ore)\n"
-        "   Ordini >2 ore: Economico: €0,20/min | Standard: €0,30/min | Urgente: €0,50/min\n\n"
-        "● Podcast e Interviste\n"
-        "   Standard: €0,50/min (48 ore) | Urgente: €0,70/min (24 ore)\n"
-        "   Ordini >2 ore: Standard: €0,45/min | Urgente: €0,60/min\n\n"
-        "● Conferenze e Webinar\n"
-        "   Standard: €0,60/min (48 ore) | Urgente: €0,80/min (24 ore)\n"
-        "   Ordini >2 ore: Standard: €0,50/min | Urgente: €0,70/min\n\n"
+        "Hai bisogno di trascrivere lezioni, corsi, conferenze o altri contenuti audio? "
+        "Appunti Perfetti offre trascrizioni rapide, precise e a prezzi vantaggiosi.\n\n"
+        "Servizi e Prezzi:\n"
+        "● Lezioni: Economico: €0,25/min | Standard: €0,40/min | Urgente: €0,60/min\n"
+        "   (>2 ore: Economico: €0,20/min | Standard: €0,30/min | Urgente: €0,50/min)\n"
+        "● Podcast: Standard: €0,50/min | Urgente: €0,70/min\n"
+        "   (>2 ore: Standard: €0,45/min | Urgente: €0,60/min)\n"
+        "● Conferenze: Standard: €0,60/min | Urgente: €0,80/min\n"
+        "   (>2 ore: Standard: €0,50/min | Urgente: €0,70/min)\n\n"
         "Come funziona:\n"
-        "1) Invia il tuo file audio o video\n"
+        "1) Invia il tuo file audio/video\n"
         "2) Ricevi un preventivo personalizzato\n"
-        "3) Ottieni la trascrizione pronta all’uso\n"
+        "3) Ottieni la trascrizione\n"
     )
     bot.send_message(chat_id, pricing_text)
     send_service_selection(chat_id)
@@ -160,6 +154,8 @@ def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id]['current_service'] = {'name': message.text}
+    # Rimuoviamo eventuali order_id precedenti
+    user_data[chat_id].pop('order_id', None)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     if message.text == "📚 Lezioni":
         buttons = ["Economico", "Standard", "Urgente", "🔙 Indietro"]
@@ -223,9 +219,10 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Ordine completato: resettiamo l'ordine
-        user_data[chat_id]['current_service'] = None
-        bot.send_message(chat_id, "L'ordine è stato completato. Ora puoi iniziare un nuovo ordine.")
+        # Ordine completato, genera un order_id univoco e salvalo
+        order_id = str(uuid.uuid4())
+        user_data[chat_id]['order_id'] = order_id
+        bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
     else:
         bot.send_message(chat_id, "⚠️ Errore nel caricamento. Riprova inviando il file di nuovo.")
@@ -299,7 +296,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra solo i tasti standard (senza quelli di pagamento)
+    # Mostra i tasti standard (tutti tranne quelli per il pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -313,6 +310,9 @@ def conclude_order(message):
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
         send_service_selection(chat_id)
         return
+    # Genera un identificativo univoco per l'ordine
+    order_id = str(uuid.uuid4())
+    user_data[chat_id]['order_id'] = order_id
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
@@ -340,7 +340,8 @@ def pay_with_paypal(message):
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
-
+    # Usa l'order_id generato in "concludi"; se non presente, usa il chat_id
+    order_id = user_data[chat_id].get('order_id', str(chat_id))
     payment = paypalrestsdk.Payment({
        "intent": "sale",
        "payer": {"payment_method": "paypal"},
@@ -358,15 +359,11 @@ def pay_with_paypal(message):
                    "quantity": 1
                }]
            },
-           "amount": {
-               "total": f"{total_price:.2f}",
-               "currency": "EUR"
-           },
+           "amount": {"total": f"{total_price:.2f}", "currency": "EUR"},
            "description": "Pagamento per i servizi offerti dal bot.",
-           "custom": str(chat_id)
+           "custom": order_id
        }]
     })
-
     print("Creazione pagamento...")
     if payment.create():
         print("Pagamento creato, payment.id =", payment.id)
