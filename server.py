@@ -83,6 +83,7 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
+# Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
@@ -101,4 +102,5 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
