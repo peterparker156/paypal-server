@@ -51,6 +51,7 @@ def execute_payment():
                 <body style="text-align: center; margin-top: 50px;">
                     <h1>Pagamento confermato!</h1>
                     <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
+                    <p>Se il bottone non funziona, copia questo link: https://t.me/AppuntiPerfettiBot</p>
                     <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
                         <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
                     </a>
@@ -91,6 +92,7 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
+# Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
