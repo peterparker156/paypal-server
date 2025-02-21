@@ -29,9 +29,7 @@ def execute_payment():
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
         # Se il pagamento è già stato eseguito, non lo rieseguo
-        if payment.state in ["approved", "completed"]:
-            logging.debug("Pagamento già eseguito; non rieseguo l'esecuzione.")
-        else:
+        if payment.state not in ["approved", "completed"]:
             if not payment.execute({"payer_id": payer_id}):
                 logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
                 error_msg = ""
@@ -40,17 +38,36 @@ def execute_payment():
                 else:
                     error_msg = str(payment.error)
                 return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
+        else:
+            logging.debug("Pagamento già eseguito; uso i dati esistenti.")
         logging.debug("Pagamento eseguito correttamente")
-        chat_id = None
+        # Verifica se il campo custom esiste
+        custom_field = payment.transactions[0].get("custom")
+        if not custom_field:
+            logging.warning("Campo custom mancante: pagamento già processato?")
+            return '''
+            <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Pagamento già confermato</title>
+                </head>
+                <body style="text-align: center; margin-top: 50px;">
+                    <h1>Pagamento già confermato!</h1>
+                    <p>Questo pagamento è già stato processato. Premi il pulsante per tornare al bot e inizia un nuovo ordine.</p>
+                    <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
+                        <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
+                    </a>
+                </body>
+            </html>
+            ''', 200
         try:
-            chat_id = int(payment.transactions[0].get("custom"))
+            chat_id = int(custom_field)
             logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
         except Exception as e:
             logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
-        if chat_id:
-            notify_user_payment_success(chat_id)
-        else:
-            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
+            return f"Errore nel recupero delle informazioni dell'ordine: {e}", 500
+        # Notifica l'utente tramite il bot e resetta l'ordine
+        notify_user_payment_success(chat_id)
         return '''
         <html>
             <head>
@@ -99,7 +116,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo completamente i dati dell'ordine per questa chat
+        # Resettiamo completamente i dati per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
