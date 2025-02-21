@@ -27,7 +27,6 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        # Se il pagamento non è già completato, proviamo a eseguirlo
         if payment.state not in ["approved", "completed"]:
             if callable(payment.execute):
                 if not payment.execute({"payer_id": payer_id}):
@@ -40,11 +39,10 @@ def execute_payment():
         else:
             logging.debug("Pagamento già processato (stato: %s)", payment.state)
         logging.debug("Pagamento eseguito correttamente")
-        # Recuperiamo il chat_id dal mapping
         from bot import orders_mapping
         chat_id = orders_mapping.pop(payment.id, None)
         if not chat_id:
-            logging.warning("Mapping non trovato per payment.id %s; campo custom mancante?", payment.id)
+            logging.warning("Mapping non trovato per payment.id %s; impossibile recuperare chat_id", payment.id)
             return '''
             <html>
                 <head>
@@ -60,6 +58,7 @@ def execute_payment():
                 </body>
             </html>
             ''', 200
+        from bot import notify_user_payment_success
         notify_user_payment_success(chat_id)
         return '''
         <html>
@@ -100,6 +99,7 @@ def paypal_webhook():
             from bot import orders_mapping
             chat_id = orders_mapping.pop(payment.id, None)
             if chat_id:
+                from bot import notify_user_payment_success
                 notify_user_payment_success(chat_id)
         except Exception as e:
             logging.error("Errore nel webhook: %s", e)
