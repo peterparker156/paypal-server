@@ -17,14 +17,14 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servi
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dizionari per i dati utente
+# Dizionario per i dati utente (in memoria; per la produzione valutare un DB)
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",  # Usa "live" per la produzione
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -84,7 +84,6 @@ def send_service_selection(chat_id):
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
 
-# Funzione per formattare la durata
 def format_duration(hours, minutes, seconds):
     parts = []
     if hours > 0:
@@ -95,7 +94,6 @@ def format_duration(hours, minutes, seconds):
         parts.append(f"{seconds} secondi" if seconds > 1 else "1 secondo")
     return " ".join(parts) if parts else "0 secondi"
 
-# Funzione per calcolare il prezzo
 def compute_price(service_type, delivery, total_minutes):
     if service_type == "📚 Lezioni":
         if total_minutes <= 120:
@@ -137,7 +135,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# HANDLER DEL BOT
+# HANDLER DEL BOT (Telegram)
 ###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -161,7 +159,7 @@ def welcome(message):
         "● Conferenze e Webinar\n"
         "   Standard: €0,60/min (48 ore) | Urgente: €0,80/min (24 ore)\n"
         "   Ordini >2 ore: Standard: €0,50/min | Urgente: €0,70/min\n\n"
-        "Come Funziona?\n"
+        "Come funziona:\n"
         "1) Invia il tuo file audio o video\n"
         "2) Ricevi un preventivo personalizzato\n"
         "3) Ottieni la trascrizione pronta all’uso\n"
@@ -311,8 +309,10 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
+    # Mostra TUTTI i bottoni per gestire l'ordine
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
+    markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo",
+               "❌ Rimuovi un servizio", "✔️ Concludi", "💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
@@ -329,7 +329,7 @@ def conclude_order(message):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine", "📋 Riepilogo", "📚 Lezioni", "🎙 Podcast", "🎤 Conferenze")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
@@ -395,3 +395,4 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
+
