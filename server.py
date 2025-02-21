@@ -28,32 +28,28 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        # Se il pagamento è già stato eseguito, non lo rieseguo
+        # Se il pagamento è già stato eseguito, non rieseguo l'esecuzione
         if payment.state not in ["approved", "completed"]:
             if not payment.execute({"payer_id": payer_id}):
                 logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-                error_msg = ""
-                if isinstance(payment.error, dict):
-                    error_msg = payment.error.get("message", str(payment.error))
-                else:
-                    error_msg = str(payment.error)
+                error_msg = payment.error.get("message", str(payment.error)) if isinstance(payment.error, dict) else str(payment.error)
                 return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
         else:
             logging.debug("Pagamento già eseguito; uso i dati esistenti.")
         logging.debug("Pagamento eseguito correttamente")
-        # Verifica se il campo custom esiste
+        # Se il campo custom è mancante, significa che il pagamento è già stato processato
         custom_field = payment.transactions[0].get("custom")
         if not custom_field:
-            logging.warning("Campo custom mancante: pagamento già processato?")
+            logging.debug("Campo custom mancante, pagamento già processato. Ritorno conferma.")
             return '''
             <html>
                 <head>
                     <meta charset="utf-8">
-                    <title>Pagamento già confermato</title>
+                    <title>Pagamento Confermato</title>
                 </head>
                 <body style="text-align: center; margin-top: 50px;">
                     <h1>Pagamento già confermato!</h1>
-                    <p>Questo pagamento è già stato processato. Premi il pulsante per tornare al bot e inizia un nuovo ordine.</p>
+                    <p>Il tuo pagamento è già stato processato. Torna al bot per iniziare un nuovo ordine.</p>
                     <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
                         <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
                     </a>
@@ -66,7 +62,6 @@ def execute_payment():
         except Exception as e:
             logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
             return f"Errore nel recupero delle informazioni dell'ordine: {e}", 500
-        # Notifica l'utente tramite il bot e resetta l'ordine
         notify_user_payment_success(chat_id)
         return '''
         <html>
@@ -116,7 +111,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Resettiamo completamente i dati per questa chat
+        # Resettiamo completamente i dati dell'ordine per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
@@ -127,3 +122,4 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
