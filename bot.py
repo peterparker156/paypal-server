@@ -17,14 +17,14 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria)
+# Dati utente in memoria
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",  
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -41,8 +41,7 @@ def init_user_data(chat_id):
         }
 
 def get_service():
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def get_or_create_user_folder(service, username):
@@ -66,10 +65,7 @@ def upload_to_drive(file_path, chat_id):
         chat = bot.get_chat(chat_id)
         username = chat.username if chat.username else f"user_{chat_id}"
         user_folder_id = get_or_create_user_folder(service, username)
-        file_metadata = {
-            'name': os.path.basename(file_path),
-            'parents': [user_folder_id]
-        }
+        file_metadata = {'name': os.path.basename(file_path), 'parents': [user_folder_id]}
         media = MediaFileUpload(file_path, resumable=True)
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         return "✅ File caricato correttamente"
@@ -80,7 +76,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (senza i tasti di pagamento)
+    # Tasti standard (non includono i tasti di pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -202,7 +198,6 @@ def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
-    # La durata può essere inserita solo se la modalità di consegna è stata scelta
     if current is None or "delivery" not in current:
         bot.send_message(chat_id, "⚠️ Non è richiesta l'inserimento della durata in questo momento.")
         return
@@ -237,7 +232,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Resettiamo l'ordine e inviamo la conferma
+        # Ordine completato: resetta l'ordine e invia conferma
         user_data[chat_id]['current_service'] = None
         bot.send_message(chat_id, "L'ordine è stato completato. Ora puoi iniziare un nuovo ordine.")
         send_service_selection(chat_id)
@@ -313,7 +308,7 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra i tasti standard (non includono i tasti per il pagamento)
+    # Mostra i tasti standard (tutti tranne quelli per il pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -331,7 +326,7 @@ def conclude_order(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
-    # Solo in questo handler mostriamo i tasti "💳 Paga con PayPal" e "❌ Annulla Ordine"
+    # Mostra SOLO i tasti "💳 Paga con PayPal" e "❌ Annulla Ordine"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
