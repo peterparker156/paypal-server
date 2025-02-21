@@ -1,4 +1,3 @@
-
 from flask import Flask, request, redirect, url_for, jsonify
 import paypalrestsdk
 import logging
@@ -24,19 +23,21 @@ def execute_payment():
 
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
-        logging.debug("Pagamento trovato: %s", payment.id)
+        payment_dict = payment.to_dict()
+        logging.debug("Payment object: %s", payment_dict)
     except Exception as e:
-        logging.error("Errore nel recupero del pagamento: %s", e)
+        logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
 
     if payment.execute({"payer_id": payer_id}):
         logging.debug("Pagamento eseguito correttamente")
+        chat_id = None
         try:
-            chat_id = int(payment.transactions[0].custom)
+            # Recupera il chat_id dal campo custom della prima transazione
+            chat_id = int(payment.transactions[0].get("custom"))
             logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
         except Exception as e:
             logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
-            chat_id = None
         if chat_id:
             notify_user_payment_success(chat_id)
         else:
@@ -62,8 +63,7 @@ def execute_payment():
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
-    payment_id = request.args.get('paymentId')
-    # Se necessario, puoi inviare una notifica al bot qui
+    # Puoi aggiungere una notifica di cancellazione qui se vuoi
     return "Pagamento annullato", 200
 
 @app.route('/webhook', methods=['POST'])
@@ -78,9 +78,8 @@ def paypal_webhook():
         resource = event_body.get('resource', {})
         payment_id = resource.get('parent_payment')
         try:
-            # Prova a recuperare il chat_id dal campo custom
             payment = paypalrestsdk.Payment.find(payment_id)
-            chat_id = int(payment.transactions[0].custom)
+            chat_id = int(payment.transactions[0].get("custom"))
             notify_user_payment_success(chat_id)
         except Exception as e:
             logging.error("Errore nel webhook: %s", e)
@@ -93,6 +92,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # (Opzionale) Resetta i dati dell'ordine
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
@@ -105,5 +105,6 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
        
