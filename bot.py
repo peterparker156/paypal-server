@@ -8,23 +8,23 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import paypalrestsdk  # Per la gestione dei pagamenti
 
-# Configurazione del bot Telegram (usa il tuo token)
+# Configurazione del bot Telegram
 API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Configurazione di Google Drive
-SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servizio
+SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dizionario per i dati utente (in memoria)
+# Dati utente (in memoria)
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -80,10 +80,12 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # Tasti standard (non includono "💳 Paga con PayPal" e "❌ Annulla Ordine")
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
 
+# Funzione per formattare la durata
 def format_duration(hours, minutes, seconds):
     parts = []
     if hours > 0:
@@ -94,6 +96,7 @@ def format_duration(hours, minutes, seconds):
         parts.append(f"{seconds} secondi" if seconds > 1 else "1 secondo")
     return " ".join(parts) if parts else "0 secondi"
 
+# Funzione per calcolare il prezzo (minuti totali * tariffa per minuto)
 def compute_price(service_type, delivery, total_minutes):
     if service_type == "📚 Lezioni":
         if total_minutes <= 120:
@@ -135,7 +138,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# HANDLER DEL BOT
+# HANDLER DEL BOT (Telegram)
 ###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -201,7 +204,6 @@ def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
-    # La durata può essere inserita solo se è stata richiesta (cioè, se è stato impostato 'delivery')
     if current is None or "delivery" not in current:
         bot.send_message(chat_id, "⚠️ Non è richiesta l'inserimento della durata in questo momento.")
         return
@@ -310,9 +312,9 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Solo in questo riepilogo finale, i bottoni disponibili sono "💳 Paga con PayPal" e "❌ Annulla Ordine"
+    # In questo handler mostriamo TUTTI i bottoni standard (senza i bottoni di pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
+    markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
@@ -328,7 +330,7 @@ def conclude_order(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
-    # Mostra SOLO i bottoni "💳 Paga con PayPal" e "❌ Annulla Ordine"
+    # In questo handler, mostriamo SOLO "💳 Paga con PayPal" e "❌ Annulla Ordine"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -338,7 +340,7 @@ def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
-    bot.send_message(chat_id, "❌ Ordine annullato. L'ordine è stato resettato. Premi /start per iniziare un nuovo ordine.")
+    bot.send_message(chat_id, "❌ Ordine annullato e resettato. Premi /start per iniziare un nuovo ordine.")
 
 ###############################################
 # HANDLER PER IL PAGAMENTO CON PAYPAL
@@ -396,4 +398,3 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
