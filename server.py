@@ -1,6 +1,8 @@
-from flask import Flask, request, redirect, url_for, jsonify
+
+from flask import Flask, request, jsonify
 import paypalrestsdk
 import logging
+import threading
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -104,7 +106,11 @@ def home():
     return "Server attivo!"
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Avvia il bot in un thread separato
+    bot_thread = threading.Thread(target=bot.polling, kwargs={'none_stop': True})
+    bot_thread.start()
 
+    # Avvia il server Flask
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
        
