@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, redirect, url_for, jsonify
 import paypalrestsdk
 import logging
 
@@ -6,9 +6,9 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live
+# Configura il PayPal SDK in modalità live (stesse credenziali usate nel bot)
 paypalrestsdk.configure({
-    "mode": "live",
+    "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -20,46 +20,27 @@ def execute_payment():
     logging.debug("Esecuzione pagamento: paymentId=%s, PayerID=%s", payment_id, payer_id)
     if not payment_id or not payer_id:
         return "Errore: Mancano i parametri necessari", 400
+
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
-        logging.debug("Payment trovato: %s", payment.id)
+        payment_dict = payment.to_dict()
+        logging.debug("Payment object: %s", payment_dict)
     except Exception as e:
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
-    try:
-        if payment.state not in ["approved", "completed"]:
-            if callable(payment.execute):
-                if not payment.execute({"payer_id": payer_id}):
-                    logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-                    error_msg = (payment.error.get("message", str(payment.error))
-                                 if isinstance(payment.error, dict) else str(payment.error))
-                    return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
-            else:
-                logging.debug("payment.execute non callable; assumo pagamento già processato.")
-        else:
-            logging.debug("Pagamento già processato (stato: %s)", payment.state)
+
+    if payment.execute({"payer_id": payer_id}):
         logging.debug("Pagamento eseguito correttamente")
-        from bot import orders_mapping
-        chat_id = orders_mapping.pop(payment.id, None)
-        if not chat_id:
-            logging.warning("Mapping non trovato per payment.id %s; impossibile recuperare chat_id", payment.id)
-            return '''
-            <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Pagamento già confermato</title>
-                </head>
-                <body style="text-align: center; margin-top: 50px;">
-                    <h1>Pagamento già confermato!</h1>
-                    <p>Il tuo pagamento è già stato processato. Torna al bot per iniziare un nuovo ordine.</p>
-                    <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
-                        <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
-                    </a>
-                </body>
-            </html>
-            ''', 200
-        from bot import notify_user_payment_success
-        notify_user_payment_success(chat_id)
+        chat_id = None
+        try:
+            chat_id = int(payment.transactions[0].get("custom"))
+            logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
+        except Exception as e:
+            logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
+        if chat_id:
+            notify_user_payment_success(chat_id)
+        else:
+            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
         return '''
         <html>
             <head>
@@ -69,16 +50,15 @@ def execute_payment():
             <body style="text-align: center; margin-top: 50px;">
                 <h1>Pagamento confermato!</h1>
                 <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
-                <p>Se il pulsante non funziona, copia questo link: https://t.me/AppuntiPerfettiBot</p>
                 <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
                     <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
                 </a>
             </body>
         </html>
         ''', 200
-    except Exception as ex:
-        logging.error("Eccezione durante l'esecuzione del pagamento: %s", ex)
-        return f"Eccezione durante l'esecuzione del pagamento: {ex}", 500
+    else:
+        logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
+        return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
@@ -89,6 +69,7 @@ def paypal_webhook():
     event_body = request.get_json()
     if not event_body:
         return jsonify({'error': 'No data received'}), 400
+
     event_type = event_body.get('event_type')
     logging.debug("Webhook ricevuto: event_type=%s", event_type)
     if event_type == "PAYMENT.SALE.COMPLETED":
@@ -96,11 +77,8 @@ def paypal_webhook():
         payment_id = resource.get('parent_payment')
         try:
             payment = paypalrestsdk.Payment.find(payment_id)
-            from bot import orders_mapping
-            chat_id = orders_mapping.pop(payment.id, None)
-            if chat_id:
-                from bot import notify_user_payment_success
-                notify_user_payment_success(chat_id)
+            chat_id = int(payment.transactions[0].get("custom"))
+            notify_user_payment_success(chat_id)
         except Exception as e:
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
@@ -110,8 +88,10 @@ from bot import bot, user_data
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        user_data[chat_id] = {'services': [], 'current_service': None, 'order_id': None, 'mode': 'normal'}
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        if chat_id in user_data:
+            user_data[chat_id]['services'] = []
+            user_data[chat_id]['current_service'] = None
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
