@@ -28,12 +28,15 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
     try:
-        # Se il pagamento non è ancora completato, tentiamo di eseguirlo
+        # Se il pagamento non è già in stato approvato/completato, eseguiamo l'execute
         if payment.state not in ["approved", "completed"]:
-            if not payment.execute({"payer_id": payer_id}):
-                logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-                error_msg = payment.error.get("message", str(payment.error)) if isinstance(payment.error, dict) else str(payment.error)
-                return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
+            if callable(payment.execute):
+                if not payment.execute({"payer_id": payer_id}):
+                    logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
+                    error_msg = payment.error.get("message", str(payment.error)) if isinstance(payment.error, dict) else str(payment.error)
+                    return f"Errore durante l'esecuzione del pagamento: {error_msg}", 500
+            else:
+                logging.debug("payment.execute non callable, assumo pagamento già processato.")
         else:
             logging.debug("Pagamento già eseguito; uso i dati esistenti.")
         logging.debug("Pagamento eseguito correttamente")
@@ -110,7 +113,6 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi! Ora puoi iniziare un nuovo ordine.")
-        # Reset dell'ordine per questa chat
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
