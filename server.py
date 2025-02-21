@@ -7,7 +7,7 @@ orders_mapping = {}
 # Inizializza l'app Flask
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live (stesse credenziali del bot)
+# Configura il PayPal SDK in modalità live (stesse credenziali usate nel bot)
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -30,9 +30,24 @@ def execute_payment():
         chat_id = orders_mapping.get(payment_id)
         if chat_id:
             notify_user_payment_success(chat_id)
-        return "Pagamento eseguito con successo!", 200
+        # Ritorna una pagina HTML con un pulsante per tornare al bot
+        return '''
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Pagamento Confermato</title>
+            </head>
+            <body style="text-align: center; margin-top: 50px;">
+                <h1>Pagamento confermato!</h1>
+                <p>Il tuo pagamento è stato eseguito con successo.</p>
+                <a href="https://t.me/Appuntiperfettibot" target="_blank">
+                    <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
+                </a>
+            </body>
+        </html>
+        ''', 200
     else:
-        return "Errore durante l'esecuzione del pagamento", 500
+        return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
@@ -63,6 +78,7 @@ from bot import bot, user_data
 def notify_user_payment_success(chat_id):
     try:
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. Grazie per l'acquisto!")
+        # Puoi resettare i dati dell'ordine, se lo desideri:
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
@@ -81,4 +97,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
