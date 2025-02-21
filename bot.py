@@ -253,7 +253,6 @@ def show_summary(message):
         text += f"{idx+1}. {service['name']} - {service['delivery']}\n   ⏳ {service['duration']} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Mostriamo i pulsanti per pagare o annullare l'ordine
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
@@ -326,10 +325,14 @@ def pay_with_paypal(message):
        }]
     })
 
+    print("Creazione pagamento...")
     if payment.create():
+        print("Pagamento creato, payment.id =", payment.id)
         orders_mapping[payment.id] = chat_id
         approval_url = None
+        # Debug: stampa tutti i link ottenuti
         for link in payment.links:
+            print("Link trovato:", link.rel, link.href)
             if link.rel == "approval_url":
                 approval_url = str(link.href)
                 break
@@ -342,3 +345,4 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
+
