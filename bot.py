@@ -156,14 +156,17 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# FUNZIONE PER NOTIFICARE L'UTENTE
+# FUNZIONE PER NOTIFICARE L'UTENTE (AGGIORNATA)
 ###############################################
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Resetta i dati dell'utente per iniziare un nuovo ordine
-        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+        # Elimina completamente lo stato precedente per l'utente
+        if chat_id in user_data:
+            del user_data[chat_id]
+        # Rinizializza lo stato per consentire un nuovo ordine
+        init_user_data(chat_id)
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
@@ -428,4 +431,3 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
