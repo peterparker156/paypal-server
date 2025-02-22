@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configurazione del PayPal SDK in modalità live
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -32,7 +32,6 @@ def execute_payment():
         logging.debug("Pagamento eseguito correttamente")
         chat_id = None
         try:
-            # Verifica che esista almeno una transazione e che contenga il campo custom
             if payment.transactions and len(payment.transactions) > 0:
                 custom_value = payment.transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
@@ -97,8 +96,9 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
-# Nuova route per gestire webhook alla path /webhook/paypal (evita 404)
+# Definiamo la route /webhook/paypal sia con che senza trailing slash
 @app.route('/webhook/paypal', methods=['POST'])
+@app.route('/webhook/paypal/', methods=['POST'])
 def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
@@ -110,7 +110,6 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Reset completo dei dati dell'ordine per il chat_id
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
