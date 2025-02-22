@@ -16,7 +16,7 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzioni per gestire la mapping nel database (chat_id trattato come stringa)
+# Funzioni per gestire la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -67,7 +67,7 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    chat_id = custom_value  # Tratta il valore come stringa
+                    chat_id = custom_value  # trattato come stringa
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
@@ -149,20 +149,18 @@ def paypal_webhook():
         
     return jsonify({'status': 'success'}), 200
 
-# Route per webhook con o senza trailing slash
 @app.route('/webhook/paypal', methods=['POST'])
 @app.route('/webhook/paypal/', methods=['POST'])
 def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# Importa il bot e la variabile user_data dal file bot.py
-from bot import bot, user_data, notify_user_payment_success
-
 @app.route('/')
 def home():
     return "Server attivo!"
 
+# Importa la funzione di notifica dal bot
+from bot import notify_user_payment_success
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
