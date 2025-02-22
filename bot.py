@@ -162,13 +162,13 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Elimina completamente lo stato precedente per l'utente
-        if chat_id in user_data:
-            del user_data[chat_id]
-        # Rinizializza lo stato per consentire un nuovo ordine
-        init_user_data(chat_id)
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
+    # Rimuovi completamente lo stato precedente per questo utente, se esiste
+    if chat_id in user_data:
+        del user_data[chat_id]
+    # Reinizializza lo stato per consentire un nuovo ordine
+    init_user_data(chat_id)
 
 ###############################################
 # HANDLER DEL BOT
