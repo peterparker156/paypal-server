@@ -6,7 +6,7 @@ import redis
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
-# Configurazione di Redis (modifica host/port se necessario)
+# Configura Redis (modifica host, port, db o password in produzione se necessario)
 r = redis.Redis(host='localhost', port=6379, db=0)
 
 # Configura il PayPal SDK in modalità live
@@ -43,7 +43,7 @@ def execute_payment():
                 if custom_value:
                     chat_id = int(custom_value)
                 else:
-                    # Se il campo custom non è presente, proviamo a recuperarlo da Redis
+                    # Se il campo custom non è presente, prova a recuperarlo da Redis
                     mapping = r.get(payment.id)
                     if mapping:
                         chat_id = int(mapping.decode('utf-8'))
@@ -126,7 +126,7 @@ def paypal_webhook():
         
     return jsonify({'status': 'success'}), 200
 
-# Definiamo la route /webhook/paypal (con e senza trailing slash)
+# Route per webhook con o senza trailing slash
 @app.route('/webhook/paypal', methods=['POST'])
 @app.route('/webhook/paypal/', methods=['POST'])
 def paypal_webhook_paypal():
@@ -140,6 +140,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # Resetta i dati dell'utente per iniziare un nuovo ordine
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
