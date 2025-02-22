@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live
+# Configurazione del PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -23,8 +23,7 @@ def execute_payment():
 
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
-        payment_dict = payment.to_dict()
-        logging.debug("Payment object: %s", payment_dict)
+        logging.debug("Payment object: %s", payment.to_dict())
     except Exception as e:
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
@@ -98,6 +97,12 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
+# Nuova route per gestire webhook alla path /webhook/paypal (evita 404)
+@app.route('/webhook/paypal', methods=['POST'])
+def paypal_webhook_paypal():
+    logging.debug("Webhook /webhook/paypal ricevuto")
+    return paypal_webhook()
+
 # Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
@@ -105,7 +110,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Reset dei dati dell'ordine per il chat_id
+        # Reset completo dei dati dell'ordine per il chat_id
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
