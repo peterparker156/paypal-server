@@ -3,8 +3,10 @@ import paypalrestsdk
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
-
 app = Flask(__name__)
+
+# Mapping globale: associa payment.id -> chat_id
+payment_mapping = {}
 
 # Configurazione del PayPal SDK in modalità live
 paypalrestsdk.configure({
@@ -39,8 +41,11 @@ def execute_payment():
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
                     chat_id = int(custom_value)
+                elif payment.id in payment_mapping:
+                    chat_id = payment_mapping[payment.id]
+                    logging.debug("Recuperato chat_id dalla mapping: %s", chat_id)
                 else:
-                    logging.error("Campo custom mancante nella transazione.")
+                    logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
             else:
                 logging.error("Nessuna transazione trovata nel payment object.")
         except Exception as e:
@@ -82,7 +87,6 @@ def paypal_webhook():
     logging.debug("Webhook ricevuto: %s", event_body)
     logging.debug("Tipo evento: %s", event_type)
     
-    # Gestione in base al tipo di evento
     if event_type == "PAYMENT.SALE.COMPLETED":
         try:
             payment_id = event_body.get('resource', {}).get('parent_payment')
@@ -93,11 +97,16 @@ def paypal_webhook():
                 if transactions and len(transactions) > 0:
                     custom_value = transactions[0].get("custom")
                     logging.debug("Valore custom nel webhook SALE COMPLETED: %s", custom_value)
+                    chat_id = None
                     if custom_value:
                         chat_id = int(custom_value)
-                        notify_user_payment_success(chat_id)
+                    elif payment.id in payment_mapping:
+                        chat_id = payment_mapping[payment.id]
+                        logging.debug("Recuperato chat_id dalla mapping nel webhook: %s", chat_id)
                     else:
-                        logging.error("Campo custom mancante nel webhook per payment_id: %s", payment_id)
+                        logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
+                    if chat_id:
+                        notify_user_payment_success(chat_id)
                 else:
                     logging.error("Nessuna transazione trovata nel webhook per payment_id: %s", payment_id)
             else:
@@ -105,8 +114,7 @@ def paypal_webhook():
         except Exception as e:
             logging.error("Errore nel webhook (SALE COMPLETED): %s", e)
     elif event_type == "PAYMENTS.PAYMENT.CREATED":
-        # Se desideri gestire anche questo evento, puoi farlo qui
-        logging.info("Evento PAYMENT.CREATED ricevuto. Nessuna azione intrapresa.")
+        logging.info("Evento PAYMENT.CREATED ricevuto. Registrare se necessario.")
     else:
         logging.info("Evento non gestito: %s", event_type)
         
@@ -126,7 +134,6 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Reset completo dei dati dell'ordine per il chat_id
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
