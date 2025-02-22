@@ -31,7 +31,7 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzione per salvare la mapping nel database
+# Funzione per salvare la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -401,7 +401,7 @@ def pay_with_paypal(message):
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
         # Salva la mapping nel database
-        save_mapping(payment.id, chat_id)
+        save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
             logging.debug("Link trovato: %s - %s", link.rel, link.href)
