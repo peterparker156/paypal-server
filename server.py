@@ -1,4 +1,5 @@
-from flask import Flask, request, redirect, url_for, jsonify
+# flask_app.py
+from flask import Flask, request, jsonify
 import paypalrestsdk
 import logging
 
@@ -6,7 +7,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live (stesse credenziali usate nel bot)
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -63,7 +64,7 @@ def execute_payment():
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
-    # Puoi aggiungere una notifica di cancellazione qui se vuoi
+    # Se necessario, puoi inviare una notifica di annullamento all'utente (es. tramite webhook o altro)
     return "Pagamento annullato", 200
 
 @app.route('/webhook', methods=['POST'])
@@ -92,10 +93,8 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # (Opzionale) Resetta i dati dell'ordine
-        if chat_id in user_data:
-            user_data[chat_id]['services'] = []
-            user_data[chat_id]['current_service'] = None
+        # Reset completo dei dati dell'ordine per il chat_id
+        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
