@@ -33,6 +33,7 @@ def execute_payment():
         logging.debug("Pagamento eseguito correttamente")
         chat_id = None
         try:
+            # Recupera il chat_id dal campo custom della prima transazione
             chat_id = int(payment.transactions[0].get("custom"))
             logging.debug("chat_id recuperato dal campo custom: %s", chat_id)
         except Exception as e:
@@ -62,6 +63,7 @@ def execute_payment():
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
+    # Puoi aggiungere una notifica di cancellazione qui se vuoi
     return "Pagamento annullato", 200
 
 @app.route('/webhook', methods=['POST'])
@@ -83,12 +85,14 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
+# Importa il bot e i dati dal file bot.py
 from bot import bot, user_data
 
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # (Opzionale) Resetta i dati dell'ordine
         if chat_id in user_data:
             user_data[chat_id]['services'] = []
             user_data[chat_id]['current_service'] = None
