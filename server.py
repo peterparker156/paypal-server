@@ -1,14 +1,15 @@
 from flask import Flask, request, jsonify
 import paypalrestsdk
 import logging
+import redis
 
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
-# Mapping globale: associa payment.id -> chat_id
-payment_mapping = {}
+# Configurazione di Redis (modifica host/port se necessario)
+r = redis.Redis(host='localhost', port=6379, db=0)
 
-# Configurazione del PayPal SDK in modalità live
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -41,11 +42,14 @@ def execute_payment():
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
                     chat_id = int(custom_value)
-                elif payment.id in payment_mapping:
-                    chat_id = payment_mapping[payment.id]
-                    logging.debug("Recuperato chat_id dalla mapping: %s", chat_id)
                 else:
-                    logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
+                    # Se il campo custom non è presente, proviamo a recuperarlo da Redis
+                    mapping = r.get(payment.id)
+                    if mapping:
+                        chat_id = int(mapping.decode('utf-8'))
+                        logging.debug("Recuperato chat_id dalla mapping Redis: %s", chat_id)
+                    else:
+                        logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
             else:
                 logging.error("Nessuna transazione trovata nel payment object.")
         except Exception as e:
@@ -100,11 +104,13 @@ def paypal_webhook():
                     chat_id = None
                     if custom_value:
                         chat_id = int(custom_value)
-                    elif payment.id in payment_mapping:
-                        chat_id = payment_mapping[payment.id]
-                        logging.debug("Recuperato chat_id dalla mapping nel webhook: %s", chat_id)
                     else:
-                        logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
+                        mapping = r.get(payment.id)
+                        if mapping:
+                            chat_id = int(mapping.decode('utf-8'))
+                            logging.debug("Recuperato chat_id dalla mapping Redis nel webhook: %s", chat_id)
+                        else:
+                            logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
                     if chat_id:
                         notify_user_payment_success(chat_id)
                 else:
@@ -114,7 +120,7 @@ def paypal_webhook():
         except Exception as e:
             logging.error("Errore nel webhook (SALE COMPLETED): %s", e)
     elif event_type == "PAYMENTS.PAYMENT.CREATED":
-        logging.info("Evento PAYMENT.CREATED ricevuto. Registrare se necessario.")
+        logging.info("Evento PAYMENT.CREATED ricevuto. Nessuna azione intrapresa.")
     else:
         logging.info("Evento non gestito: %s", event_type)
         
