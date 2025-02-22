@@ -4,3 +4,4 @@ psycopg2-binary
 telebot
 google-api-python-client
 google-auth
+gunicorn
