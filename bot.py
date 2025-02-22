@@ -1,30 +1,30 @@
 import os
 import threading
+import time
 import telebot
-import uuid
 from telebot import types
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import paypalrestsdk  # Per la gestione dei pagamenti
 
-# Configurazione del bot Telegram
+# Configurazione del bot Telegram (usa il tuo token)
 API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Configurazione di Google Drive
-SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
+SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servizio
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dati utente (in memoria – per produzione valutare un database)
+# Dizionari per i dati utente
 user_data = {}
 
 ###############################################
 # CONFIGURAZIONE PAYPAL (modalità live)
 ###############################################
 paypalrestsdk.configure({
-    "mode": "live",
+    "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -34,10 +34,15 @@ paypalrestsdk.configure({
 ###############################################
 def init_user_data(chat_id):
     if chat_id not in user_data:
-        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+        user_data[chat_id] = {
+            'services': [],
+            'current_service': None,
+            'mode': 'normal'
+        }
 
 def get_service():
-    creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def get_or_create_user_folder(service, username):
@@ -47,7 +52,11 @@ def get_or_create_user_folder(service, username):
     if items:
         return items[0]['id']
     else:
-        file_metadata = {'name': username, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [FOLDER_ID]}
+        file_metadata = {
+            'name': username,
+            'mimeType': 'application/vnd.google-apps.folder',
+            'parents': [FOLDER_ID]
+        }
         folder = service.files().create(body=file_metadata, fields='id').execute()
         return folder.get('id')
 
@@ -57,7 +66,10 @@ def upload_to_drive(file_path, chat_id):
         chat = bot.get_chat(chat_id)
         username = chat.username if chat.username else f"user_{chat_id}"
         user_folder_id = get_or_create_user_folder(service, username)
-        file_metadata = {'name': os.path.basename(file_path), 'parents': [user_folder_id]}
+        file_metadata = {
+            'name': os.path.basename(file_path),
+            'parents': [user_folder_id]
+        }
         media = MediaFileUpload(file_path, resumable=True)
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         return "✅ File caricato correttamente"
@@ -68,11 +80,11 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tasti standard (non includono quelli per il pagamento)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
 
+# Funzione per formattare la durata
 def format_duration(hours, minutes, seconds):
     parts = []
     if hours > 0:
@@ -83,6 +95,7 @@ def format_duration(hours, minutes, seconds):
         parts.append(f"{seconds} secondi" if seconds > 1 else "1 secondo")
     return " ".join(parts) if parts else "0 secondi"
 
+# Funzione per calcolare il prezzo
 def compute_price(service_type, delivery, total_minutes):
     if service_type == "📚 Lezioni":
         if total_minutes <= 120:
@@ -124,7 +137,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# HANDLER DEL BOT (Telegram)
+# HANDLER DEL BOT
 ###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -132,19 +145,26 @@ def welcome(message):
     init_user_data(chat_id)
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
-        "Hai bisogno di trascrivere lezioni, corsi, conferenze o altri contenuti audio? "
-        "Appunti Perfetti offre trascrizioni rapide, precise e a prezzi vantaggiosi.\n\n"
-        "Servizi e Prezzi:\n"
-        "● Lezioni: Economico: €0,25/min | Standard: €0,40/min | Urgente: €0,60/min\n"
-        "   (>2 ore: Economico: €0,20/min | Standard: €0,30/min | Urgente: €0,50/min)\n"
-        "● Podcast: Standard: €0,50/min | Urgente: €0,70/min\n"
-        "   (>2 ore: Standard: €0,45/min | Urgente: €0,60/min)\n"
-        "● Conferenze: Standard: €0,60/min | Urgente: €0,80/min\n"
-        "   (>2 ore: Standard: €0,50/min | Urgente: €0,70/min)\n\n"
-        "Come funziona:\n"
-        "1) Invia il tuo file audio/video\n"
+        "Hai bisogno di trascrivere lezioni universitarie, corsi, conferenze o altri contenuti audio? "
+        "Appunti Perfetti ti offre trascrizioni rapide, precise e a prezzi vantaggiosi.\n\n"
+        "Cosa facciamo:\n"
+        "🔹 Lezioni universitarie e corsi\n"
+        "🔹 Podcast e interviste\n"
+        "🔹 Conferenze e webinar\n\n"
+        "Prezzi:\n"
+        "● Lezioni Universitarie e Corsi\n"
+        "   Economico: €0,25/min (1 settimana) | Standard: €0,40/min (48 ore) | Urgente: €0,60/min (24 ore)\n"
+        "   Ordini >2 ore: Economico: €0,20/min | Standard: €0,30/min | Urgente: €0,50/min\n\n"
+        "● Podcast e Interviste\n"
+        "   Standard: €0,50/min (48 ore) | Urgente: €0,70/min (24 ore)\n"
+        "   Ordini >2 ore: Standard: €0,45/min | Urgente: €0,60/min\n\n"
+        "● Conferenze e Webinar\n"
+        "   Standard: €0,60/min (48 ore) | Urgente: €0,80/min (24 ore)\n"
+        "   Ordini >2 ore: Standard: €0,50/min | Urgente: €0,70/min\n\n"
+        "Come Funziona?\n"
+        "1) Invia il tuo file audio o video\n"
         "2) Ricevi un preventivo personalizzato\n"
-        "3) Ottieni la trascrizione\n"
+        "3) Ottieni la trascrizione pronta all’uso\n"
     )
     bot.send_message(chat_id, pricing_text)
     send_service_selection(chat_id)
@@ -154,8 +174,6 @@ def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id]['current_service'] = {'name': message.text}
-    # Genera un nuovo order_id per l'ordine corrente
-    user_data[chat_id]['order_id'] = str(uuid.uuid4())
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     if message.text == "📚 Lezioni":
         buttons = ["Economico", "Standard", "Urgente", "🔙 Indietro"]
@@ -186,7 +204,7 @@ def insert_duration(message):
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
     if current is None or "delivery" not in current:
-        bot.send_message(chat_id, "⚠️ Non è richiesta l'inserimento della durata in questo momento.")
+        bot.send_message(chat_id, "⚠️ Seleziona la modalità di consegna prima di inserire la durata.")
         return
     try:
         hours, minutes, seconds = map(int, message.text.split(':'))
@@ -219,9 +237,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Reset dell'ordine corrente
         user_data[chat_id]['current_service'] = None
-        bot.send_message(chat_id, "L'ordine è stato completato. Ora clicca su ✔️ Concludi per procedere al pagamento.")
         send_service_selection(chat_id)
     else:
         bot.send_message(chat_id, "⚠️ Errore nel caricamento. Riprova inviando il file di nuovo.")
@@ -295,9 +311,8 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Mostra i tasti standard (senza quelli per il pagamento)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi")
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
@@ -309,14 +324,10 @@ def conclude_order(message):
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
         send_service_selection(chat_id)
         return
-    # Usa l'order_id generato in precedenza
-    order_id = user_data[chat_id].get('order_id', str(uuid.uuid4()))
-    user_data[chat_id]['order_id'] = order_id
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
-    # Mostra SOLO i tasti per il pagamento
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
@@ -326,7 +337,7 @@ def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
-    bot.send_message(chat_id, "❌ Ordine annullato e resettato. Premi /start per iniziare un nuovo ordine.")
+    bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
 ###############################################
 # HANDLER PER IL PAGAMENTO CON PAYPAL
@@ -339,7 +350,7 @@ def pay_with_paypal(message):
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
-    order_id = user_data[chat_id].get('order_id', str(chat_id))
+
     payment = paypalrestsdk.Payment({
        "intent": "sale",
        "payer": {"payment_method": "paypal"},
@@ -357,11 +368,15 @@ def pay_with_paypal(message):
                    "quantity": 1
                }]
            },
-           "amount": {"total": f"{total_price:.2f}", "currency": "EUR"},
+           "amount": {
+               "total": f"{total_price:.2f}",
+               "currency": "EUR"
+           },
            "description": "Pagamento per i servizi offerti dal bot.",
-           "custom": order_id
+           "custom": str(chat_id)
        }]
     })
+
     print("Creazione pagamento...")
     if payment.create():
         print("Pagamento creato, payment.id =", payment.id)
@@ -380,4 +395,5 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
+
 
