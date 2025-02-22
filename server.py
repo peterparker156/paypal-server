@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
-# Configura il PayPal SDK in modalità live
+# Configurazione del PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",  # Ambiente live
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -78,29 +78,41 @@ def paypal_webhook():
     if not event_body:
         return jsonify({'error': 'No data received'}), 400
 
-    event_type = event_body.get('event_type')
-    logging.debug("Webhook ricevuto: event_type=%s", event_type)
+    event_type = event_body.get('event_type', 'N/D')
+    logging.debug("Webhook ricevuto: %s", event_body)
+    logging.debug("Tipo evento: %s", event_type)
+    
+    # Gestione in base al tipo di evento
     if event_type == "PAYMENT.SALE.COMPLETED":
-        resource = event_body.get('resource', {})
-        payment_id = resource.get('parent_payment')
         try:
-            payment = paypalrestsdk.Payment.find(payment_id)
-            payment_dict = payment.to_dict()
-            transactions = payment_dict.get("transactions")
-            if transactions and len(transactions) > 0:
-                custom_value = transactions[0].get("custom")
-                if custom_value:
-                    chat_id = int(custom_value)
-                    notify_user_payment_success(chat_id)
+            payment_id = event_body.get('resource', {}).get('parent_payment')
+            if payment_id:
+                payment = paypalrestsdk.Payment.find(payment_id)
+                payment_dict = payment.to_dict()
+                transactions = payment_dict.get("transactions")
+                if transactions and len(transactions) > 0:
+                    custom_value = transactions[0].get("custom")
+                    logging.debug("Valore custom nel webhook SALE COMPLETED: %s", custom_value)
+                    if custom_value:
+                        chat_id = int(custom_value)
+                        notify_user_payment_success(chat_id)
+                    else:
+                        logging.error("Campo custom mancante nel webhook per payment_id: %s", payment_id)
                 else:
-                    logging.error("Campo custom mancante nel webhook per payment_id: %s", payment_id)
+                    logging.error("Nessuna transazione trovata nel webhook per payment_id: %s", payment_id)
             else:
-                logging.error("Nessuna transazione trovata nel webhook per payment_id: %s", payment_id)
+                logging.error("Parent payment non presente nell'evento SALE COMPLETED")
         except Exception as e:
-            logging.error("Errore nel webhook: %s", e)
+            logging.error("Errore nel webhook (SALE COMPLETED): %s", e)
+    elif event_type == "PAYMENTS.PAYMENT.CREATED":
+        # Se desideri gestire anche questo evento, puoi farlo qui
+        logging.info("Evento PAYMENT.CREATED ricevuto. Nessuna azione intrapresa.")
+    else:
+        logging.info("Evento non gestito: %s", event_type)
+        
     return jsonify({'status': 'success'}), 200
 
-# Route per webhook a /webhook/paypal (con e senza trailing slash)
+# Definiamo la route /webhook/paypal (con e senza trailing slash)
 @app.route('/webhook/paypal', methods=['POST'])
 @app.route('/webhook/paypal/', methods=['POST'])
 def paypal_webhook_paypal():
