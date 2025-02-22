@@ -16,7 +16,7 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzioni per gestire la mapping nel database
+# Funzioni per gestire la mapping nel database (chat_id trattato come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -33,7 +33,7 @@ def get_mapping(payment_id):
     with conn.cursor() as cur:
         cur.execute("SELECT chat_id FROM payment_mapping WHERE payment_id = %s", (payment_id,))
         result = cur.fetchone()
-        return int(result[0]) if result else None
+        return result[0] if result else None
 
 # Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
@@ -67,7 +67,7 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    chat_id = int(custom_value)
+                    chat_id = custom_value  # Tratta il valore come stringa
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
@@ -127,7 +127,7 @@ def paypal_webhook():
                     logging.debug("Valore custom nel webhook SALE COMPLETED: %s", custom_value)
                     chat_id = None
                     if custom_value:
-                        chat_id = int(custom_value)
+                        chat_id = custom_value
                     else:
                         chat_id = get_mapping(payment.id)
                         if chat_id:
@@ -165,3 +165,4 @@ def home():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
