@@ -21,7 +21,7 @@ SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
-# Dizionari per i dati utente
+# Dizionario per i dati utente
 user_data = {}
 
 # Configura la connessione al database PostgreSQL
@@ -31,7 +31,6 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzione per salvare la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -155,6 +154,18 @@ def compute_price(service_type, delivery, total_minutes):
             elif delivery == "Urgente":
                 return 0.70
     return 0.40
+
+###############################################
+# FUNZIONE PER NOTIFICARE L'UTENTE
+###############################################
+def notify_user_payment_success(chat_id):
+    try:
+        logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # Resetta i dati dell'utente per iniziare un nuovo ordine
+        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+    except Exception as e:
+        logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
 
 ###############################################
 # HANDLER DEL BOT
