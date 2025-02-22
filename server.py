@@ -23,7 +23,8 @@ def execute_payment():
 
     try:
         payment = paypalrestsdk.Payment.find(payment_id)
-        logging.debug("Payment object: %s", payment.to_dict())
+        payment_dict = payment.to_dict()
+        logging.debug("Payment object: %s", payment_dict)
     except Exception as e:
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
@@ -32,8 +33,9 @@ def execute_payment():
         logging.debug("Pagamento eseguito correttamente")
         chat_id = None
         try:
-            if payment.transactions and len(payment.transactions) > 0:
-                custom_value = payment.transactions[0].get("custom")
+            transactions = payment_dict.get("transactions")
+            if transactions and len(transactions) > 0:
+                custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
                     chat_id = int(custom_value)
@@ -83,8 +85,10 @@ def paypal_webhook():
         payment_id = resource.get('parent_payment')
         try:
             payment = paypalrestsdk.Payment.find(payment_id)
-            if payment.transactions and len(payment.transactions) > 0:
-                custom_value = payment.transactions[0].get("custom")
+            payment_dict = payment.to_dict()
+            transactions = payment_dict.get("transactions")
+            if transactions and len(transactions) > 0:
+                custom_value = transactions[0].get("custom")
                 if custom_value:
                     chat_id = int(custom_value)
                     notify_user_payment_success(chat_id)
@@ -96,7 +100,7 @@ def paypal_webhook():
             logging.error("Errore nel webhook: %s", e)
     return jsonify({'status': 'success'}), 200
 
-# Definiamo la route /webhook/paypal sia con che senza trailing slash
+# Route per webhook a /webhook/paypal (con e senza trailing slash)
 @app.route('/webhook/paypal', methods=['POST'])
 @app.route('/webhook/paypal/', methods=['POST'])
 def paypal_webhook_paypal():
@@ -110,6 +114,7 @@ def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # Reset completo dei dati dell'ordine per il chat_id
         user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
