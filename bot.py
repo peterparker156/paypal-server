@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import paypalrestsdk
 import logging
-import redis
+import psycopg2
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -24,12 +24,27 @@ FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 # Dizionari per i dati utente
 user_data = {}
 
-# Configura Redis (assicurati che host/port siano corretti per la produzione)
-r = redis.Redis(host='localhost', port=6379, db=0)
+# Configura la connessione al database PostgreSQL
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL non è impostato")
+conn = psycopg2.connect(DATABASE_URL)
+conn.autocommit = True
 
-###############################################
-# CONFIGURAZIONE PAYPAL (modalità live)
-###############################################
+# Funzione per salvare la mapping nel database
+def save_mapping(payment_id, chat_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO payment_mapping (payment_id, chat_id)
+            VALUES (%s, %s)
+            ON CONFLICT (payment_id)
+            DO UPDATE SET chat_id = EXCLUDED.chat_id;
+            """,
+            (payment_id, chat_id)
+        )
+
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -385,8 +400,8 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        # Salva la mapping persistente in Redis
-        r.set(payment.id, chat_id)
+        # Salva la mapping nel database
+        save_mapping(payment.id, chat_id)
         approval_url = None
         for link in payment.links:
             logging.debug("Link trovato: %s - %s", link.rel, link.href)
@@ -402,4 +417,3 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
