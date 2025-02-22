@@ -42,6 +42,16 @@ paypalrestsdk.configure({
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
+# Route di debug per catturare eventuali POST inviati alla radice ("/")
+@app.route('/', methods=['POST'])
+def handle_root_post():
+    logging.debug("POST received at root: %s", request.get_data())
+    return "OK", 200
+
+@app.route('/', methods=['GET'])
+def home():
+    return "Server attivo!"
+
 @app.route('/payment/execute', methods=['GET'])
 def execute_payment():
     payment_id = request.args.get('paymentId')
@@ -79,6 +89,7 @@ def execute_payment():
         except Exception as e:
             logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
+            from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli di importazione
             notify_user_payment_success(chat_id)
         else:
             logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
@@ -135,6 +146,7 @@ def paypal_webhook():
                         else:
                             logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
                     if chat_id:
+                        from bot import notify_user_payment_success
                         notify_user_payment_success(chat_id)
                 else:
                     logging.error("Nessuna transazione trovata nel webhook per payment_id: %s", payment_id)
@@ -154,13 +166,6 @@ def paypal_webhook():
 def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
-
-@app.route('/')
-def home():
-    return "Server attivo!"
-
-# Importa la funzione di notifica dal bot
-from bot import notify_user_payment_success
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
