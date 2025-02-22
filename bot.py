@@ -1,4 +1,3 @@
-# bot.py
 import os
 import threading
 import time
@@ -7,35 +6,30 @@ from telebot import types
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-import paypalrestsdk  # Per la gestione dei pagamenti
+import paypalrestsdk
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
-# Configurazione del bot Telegram (usa il tuo token)
+# Configurazione del bot Telegram
 API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
 bot = telebot.TeleBot(API_TOKEN)
 
 # Configurazione di Google Drive
-SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'  # File JSON dell'account di servizio
+SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 
 # Dizionari per i dati utente
 user_data = {}
 
-###############################################
-# CONFIGURAZIONE PAYPAL (modalità live)
-###############################################
+# Configurazione PayPal (modalità live)
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
-###############################################
-# FUNZIONI DI SUPPORTO
-###############################################
 def init_user_data(chat_id):
     if chat_id not in user_data:
         user_data[chat_id] = {
@@ -88,7 +82,6 @@ def send_service_selection(chat_id):
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
 
-# Funzione per formattare la durata
 def format_duration(hours, minutes, seconds):
     parts = []
     if hours > 0:
@@ -99,7 +92,6 @@ def format_duration(hours, minutes, seconds):
         parts.append(f"{seconds} secondi" if seconds > 1 else "1 secondo")
     return " ".join(parts) if parts else "0 secondi"
 
-# Funzione per calcolare il prezzo
 def compute_price(service_type, delivery, total_minutes):
     if service_type == "📚 Lezioni":
         if total_minutes <= 120:
@@ -140,9 +132,6 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
-###############################################
-# HANDLER DEL BOT
-###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
@@ -196,7 +185,7 @@ def go_back(message):
 def select_delivery(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    if user_data[chat_id]['current_service'] is None:
+    if not user_data[chat_id]['current_service']:
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato. Seleziona un servizio prima.")
         return
     user_data[chat_id]['current_service']['delivery'] = message.text
@@ -207,7 +196,7 @@ def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
-    if current is None or "delivery" not in current:
+    if not current or "delivery" not in current:
         bot.send_message(chat_id, "⚠️ Seleziona la modalità di consegna prima di inserire la durata.")
         return
     try:
@@ -225,7 +214,7 @@ def insert_duration(message):
 
 def process_file(chat_id):
     current = user_data[chat_id]['current_service']
-    if current is None or 'file_message' not in current:
+    if not current or 'file_message' not in current:
         return
     if current.get('multiple_files', False):
         return
@@ -241,7 +230,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Resetta l'ordine corrente, in modo che l'utente possa inserirne uno nuovo
+        # Reset dell'ordine corrente
         user_data[chat_id]['current_service'] = None
         send_service_selection(chat_id)
     else:
@@ -255,7 +244,7 @@ def handle_document(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
-    if current is None or not current.get('file_requested', False):
+    if not current or not current.get('file_requested', False):
         bot.send_message(chat_id, "⚠️ In questo momento non è richiesto l'invio di un file.")
         return
     if 'file_message' in current:
@@ -341,13 +330,9 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    # Reset completo dei dati dell'utente
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-###############################################
-# HANDLER PER IL PAGAMENTO CON PAYPAL
-###############################################
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
@@ -401,4 +386,3 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
