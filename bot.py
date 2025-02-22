@@ -1,3 +1,4 @@
+# bot.py
 import os
 import threading
 import time
@@ -7,6 +8,9 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import paypalrestsdk  # Per la gestione dei pagamenti
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 # Configurazione del bot Telegram (usa il tuo token)
 API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
@@ -237,6 +241,7 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
+        # Resetta l'ordine corrente, in modo che l'utente possa inserirne uno nuovo
         user_data[chat_id]['current_service'] = None
         send_service_selection(chat_id)
     else:
@@ -293,7 +298,7 @@ def confirm_remove_service(message):
     idx = int(message.text) - 1
     if 0 <= idx < len(user_data[chat_id]['services']):
         removed_service = user_data[chat_id]['services'].pop(idx)
-        bot.send_message(chat_id, f"❌ Servizio rimosso: {removed_service['name']} - {removed_service.get('delivery', 'N/A')}")
+        bot.send_message(chat_id, f"❌ Servizio rimosso: {removed_service['name']} - {removed_service.get('delivery','N/A')}")
     else:
         bot.send_message(chat_id, "⚠️ Numero non valido.")
     user_data[chat_id]['mode'] = "normal"
@@ -336,6 +341,7 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
+    # Reset completo dei dati dell'utente
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
@@ -377,12 +383,12 @@ def pay_with_paypal(message):
        }]
     })
 
-    print("Creazione pagamento...")
+    logging.debug("Creazione pagamento...")
     if payment.create():
-        print("Pagamento creato, payment.id =", payment.id)
+        logging.debug("Pagamento creato, payment.id = %s", payment.id)
         approval_url = None
         for link in payment.links:
-            print("Link trovato:", link.rel, link.href)
+            logging.debug("Link trovato: %s - %s", link.rel, link.href)
             if link.rel == "approval_url":
                 approval_url = str(link.href)
                 break
@@ -395,5 +401,4 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
 
