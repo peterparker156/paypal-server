@@ -1,17 +1,43 @@
 from flask import Flask, request, jsonify
 import paypalrestsdk
 import logging
-import redis
+import os
+import psycopg2
 
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
-# Configura Redis (modifica host, port, db o password in produzione se necessario)
-r = redis.Redis(host='localhost', port=6379, db=0)
+# Leggi la stringa di connessione dal database dalle variabili d'ambiente
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL non è impostato")
+
+# Crea la connessione al database PostgreSQL
+conn = psycopg2.connect(DATABASE_URL)
+conn.autocommit = True
+
+# Funzioni per gestire la mapping nel database
+def save_mapping(payment_id, chat_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO payment_mapping (payment_id, chat_id)
+            VALUES (%s, %s)
+            ON CONFLICT (payment_id)
+            DO UPDATE SET chat_id = EXCLUDED.chat_id;
+            """,
+            (payment_id, chat_id)
+        )
+
+def get_mapping(payment_id):
+    with conn.cursor() as cur:
+        cur.execute("SELECT chat_id FROM payment_mapping WHERE payment_id = %s", (payment_id,))
+        result = cur.fetchone()
+        return int(result[0]) if result else None
 
 # Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
-    "mode": "live",  # Ambiente live
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -43,17 +69,15 @@ def execute_payment():
                 if custom_value:
                     chat_id = int(custom_value)
                 else:
-                    # Se il campo custom non è presente, prova a recuperarlo da Redis
-                    mapping = r.get(payment.id)
-                    if mapping:
-                        chat_id = int(mapping.decode('utf-8'))
-                        logging.debug("Recuperato chat_id dalla mapping Redis: %s", chat_id)
+                    chat_id = get_mapping(payment.id)
+                    if chat_id:
+                        logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
                     else:
                         logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
             else:
                 logging.error("Nessuna transazione trovata nel payment object.")
         except Exception as e:
-            logging.error("Errore nel recupero di chat_id dal campo custom: %s", e)
+            logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
             notify_user_payment_success(chat_id)
         else:
@@ -105,10 +129,9 @@ def paypal_webhook():
                     if custom_value:
                         chat_id = int(custom_value)
                     else:
-                        mapping = r.get(payment.id)
-                        if mapping:
-                            chat_id = int(mapping.decode('utf-8'))
-                            logging.debug("Recuperato chat_id dalla mapping Redis nel webhook: %s", chat_id)
+                        chat_id = get_mapping(payment.id)
+                        if chat_id:
+                            logging.debug("Recuperato chat_id dalla mapping DB nel webhook: %s", chat_id)
                         else:
                             logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
                     if chat_id:
@@ -133,17 +156,8 @@ def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# Importa il bot e i dati dal file bot.py
-from bot import bot, user_data
-
-def notify_user_payment_success(chat_id):
-    try:
-        logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
-        # Resetta i dati dell'utente per iniziare un nuovo ordine
-        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
-    except Exception as e:
-        logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
+# Importa il bot e la variabile user_data dal file bot.py
+from bot import bot, user_data, notify_user_payment_success
 
 @app.route('/')
 def home():
