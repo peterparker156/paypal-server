@@ -8,6 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import paypalrestsdk
 import logging
+import redis
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -23,13 +24,21 @@ FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
 # Dizionari per i dati utente
 user_data = {}
 
-# Configurazione PayPal (modalità live)
+# Configura Redis (assicurati che host/port siano corretti per la produzione)
+r = redis.Redis(host='localhost', port=6379, db=0)
+
+###############################################
+# CONFIGURAZIONE PAYPAL (modalità live)
+###############################################
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
+###############################################
+# FUNZIONI DI SUPPORTO
+###############################################
 def init_user_data(chat_id):
     if chat_id not in user_data:
         user_data[chat_id] = {
@@ -132,6 +141,9 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
+###############################################
+# HANDLER DEL BOT
+###############################################
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
@@ -230,7 +242,6 @@ def process_file(chat_id):
         current['file'] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
         user_data[chat_id]['services'].append(current)
-        # Reset dell'ordine corrente
         user_data[chat_id]['current_service'] = None
         send_service_selection(chat_id)
     else:
@@ -333,6 +344,9 @@ def cancel_order(message):
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
+###############################################
+# HANDLER PER IL PAGAMENTO CON PAYPAL
+###############################################
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
@@ -371,6 +385,8 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
+        # Salva la mapping persistente in Redis
+        r.set(payment.id, chat_id)
         approval_url = None
         for link in payment.links:
             logging.debug("Link trovato: %s - %s", link.rel, link.href)
