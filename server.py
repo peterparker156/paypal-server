@@ -66,51 +66,39 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
 
-    # Gestione dello stato del pagamento
-    if payment.state == "created":
-        if payment.execute({"payer_id": payer_id}):
-            logging.debug("Pagamento eseguito correttamente")
-        else:
-            logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-            return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
-    elif payment.state == "approved":
-        logging.info("Pagamento già eseguito, non eseguo nuovamente.")
-    else:
-        logging.error("Stato pagamento non gestito: %s", payment.state)
-        return f"Errore: stato pagamento non gestito: {payment.state}", 500
-
-    # Recupera il chat_id (convertendo il campo custom in intero)
-    chat_id = None
-    try:
-        transactions = payment_dict.get("transactions")
-        if transactions and len(transactions) > 0:
-            custom_value = transactions[0].get("custom")
-            logging.debug("Valore custom trovato: %s", custom_value)
-            if custom_value:
-                try:
-                    chat_id = int(custom_value)
-                except ValueError:
-                    chat_id = custom_value
-            else:
-                chat_id = get_mapping(payment.id)
-                if chat_id:
+    if payment.execute({"payer_id": payer_id}):
+        logging.debug("Pagamento eseguito correttamente")
+        chat_id = None
+        try:
+            transactions = payment_dict.get("transactions")
+            if transactions and len(transactions) > 0:
+                custom_value = transactions[0].get("custom")
+                logging.debug("Valore custom trovato: %s", custom_value)
+                if custom_value:
                     try:
-                        chat_id = int(chat_id)
+                        chat_id = int(custom_value)
                     except ValueError:
-                        pass
-                    logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
+                        chat_id = custom_value
                 else:
-                    logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
+                    chat_id = get_mapping(payment.id)
+                    if chat_id:
+                        try:
+                            chat_id = int(chat_id)
+                        except ValueError:
+                            pass
+                        logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
+                    else:
+                        logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
+            else:
+                logging.error("Nessuna transazione trovata nel payment object.")
+        except Exception as e:
+            logging.error("Errore nel recupero di chat_id: %s", e)
+        if chat_id:
+            from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli di importazione
+            notify_user_payment_success(chat_id)
         else:
-            logging.error("Nessuna transazione trovata nel payment object.")
-    except Exception as e:
-        logging.error("Errore nel recupero di chat_id: %s", e)
-    if chat_id:
-        from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli di importazione
-        notify_user_payment_success(chat_id)
-    else:
-        logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
-    return '''
+            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
+        return '''
         <html>
             <head>
                 <meta charset="utf-8">
@@ -124,7 +112,10 @@ def execute_payment():
                 </a>
             </body>
         </html>
-    ''', 200
+        ''', 200
+    else:
+        logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
+        return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
