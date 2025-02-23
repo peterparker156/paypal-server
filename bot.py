@@ -43,9 +43,9 @@ def save_mapping(payment_id, chat_id):
             (payment_id, chat_id)
         )
 
-# Configura il PayPal SDK in modalità live
+# Configurazione del PayPal SDK (se stai testando, puoi impostare "mode": "sandbox")
 paypalrestsdk.configure({
-    "mode": "live",
+    "mode": "live",  # oppure "sandbox" per testare
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -98,12 +98,11 @@ def upload_to_drive(file_path, chat_id):
     except Exception as e:
         return f"⚠️ Errore durante il caricamento: {e}"
 
-# Funzione per inviare la tastiera di selezione dei servizi (quella di default)
+# Funzione per inviare la tastiera di selezione dei servizi (di default, senza i bottoni di pagamento)
 def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tastiera predefinita (senza "💳 Paga con PayPal" e "❌ Annulla Ordine")
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -159,7 +158,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# FUNZIONE PER NOTIFICARE IL PAGAMENTO E COMPLETARE L'ORDINE
+# FUNZIONE PER NOTIFICARE IL PAGAMENTO
 ###############################################
 def notify_user_payment_success(chat_id):
     try:
@@ -167,9 +166,7 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Imposta il flag 'paid' per indicare che il pagamento è già stato eseguito
     user_data[chat_id]['paid'] = True
-    # Invia la tastiera predefinita (senza i bottoni di pagamento)
     send_service_selection(chat_id)
 
 ###############################################
@@ -335,7 +332,7 @@ def confirm_remove_service(message):
     user_data[chat_id]['mode'] = "normal"
     show_summary(message)
 
-# Modifica dell'handler "Riepilogo": viene inviato il riepilogo e la tastiera predefinita (senza i bottoni di pagamento)
+# L'handler "Riepilogo" invia il riepilogo e poi la tastiera di selezione predefinita
 @bot.message_handler(func=lambda message: message.text == "📋 Riepilogo")
 def show_summary(message):
     chat_id = message.chat.id
@@ -351,7 +348,7 @@ def show_summary(message):
     bot.send_message(chat_id, text, parse_mode='Markdown')
     send_service_selection(chat_id)
 
-# Handler "Concludi": se l'ordine è già pagato, informa l'utente; altrimenti mostra i bottoni di pagamento
+# L'handler "Concludi": se l'ordine è già pagato informa l'utente, altrimenti mostra i bottoni per pagamento e annullamento
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
@@ -367,12 +364,11 @@ def conclude_order(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
-    # Qui, dopo aver cliccato "Concludi", compaiono i bottoni per il pagamento e l'annullamento
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
-# Handler "Annulla Ordine": se l'ordine è già pagato, non permette di annullarlo
+# L'handler "Annulla Ordine": se l'ordine è già pagato non permette l'annullamento
 @bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
 def cancel_order(message):
     chat_id = message.chat.id
@@ -384,7 +380,7 @@ def cancel_order(message):
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-# Handler "Paga con PayPal": se l'ordine risulta già pagato, informa l'utente
+# L'handler "Paga con PayPal": se l'ordine è già pagato informa l'utente, altrimenti crea il pagamento e invia il link di approvazione
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
@@ -426,18 +422,18 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        # Salva la mapping nel database
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
             logging.debug("Link trovato: %s - %s", link.rel, link.href)
             if link.rel == "approval_url":
-                approval_url = str(link.href)
+                approval_url = link.href
                 break
         if approval_url:
             bot.send_message(chat_id, f"Per completare il pagamento, clicca su questo link:\n{approval_url}")
         else:
-            bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
+            logging.error("Approval URL non trovato per il payment: %s", payment)
+            bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione. Riprova.")
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
 
