@@ -160,7 +160,7 @@ def compute_price(service_type, delivery, total_minutes):
 # FUNZIONE PER NOTIFICARE IL PAGAMENTO
 ###############################################
 def notify_user_payment_success(chat_id):
-    # Se il chat_id non è presente in user_data lo inizializzo
+    # Se il chat_id non esiste ancora, lo inizializzo
     if chat_id not in user_data:
         init_user_data(chat_id)
     try:
@@ -168,7 +168,13 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    user_data[chat_id]['paid'] = True
+    # Qui cancelliamo lo stato dell'ordine in modo che il nuovo ordine parta da zero
+    user_data[chat_id] = {
+        'services': [],
+        'current_service': None,
+        'mode': 'normal',
+        'paid': False
+    }
     send_service_selection(chat_id)
 
 ###############################################
