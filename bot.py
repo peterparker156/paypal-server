@@ -4,7 +4,7 @@ from telebot import TeleBot, types
 import paypalrestsdk
 
 # Definisci il token del bot
-TOKEN = "IL_TUO_TOKEN"
+TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
 bot = TeleBot(TOKEN)
 
 # Stato globale degli utenti
