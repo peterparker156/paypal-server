@@ -40,7 +40,6 @@ def upload_to_drive(file_path, chat_id):
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
-    # Se l'ordine è già completato, non mostriamo la tastiera
     if user_data[chat_id].get("order_completed"):
         bot.send_message(chat_id, "Per iniziare un nuovo ordine, premi /start.")
         return
@@ -100,7 +99,8 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
-# La notifica di successo rimuove la tastiera e segnala all'utente di premere /start
+# Modifica fondamentale: dopo aver notificato il pagamento, resettiamo
+# completamente lo stato utente impostando "order_completed" a True.
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
@@ -111,10 +111,16 @@ def notify_user_payment_success(chat_id):
             "Per iniziare un nuovo ordine, premi /start.",
             reply_markup=markup
         )
-        user_data[chat_id]["order_completed"] = True
-        user_data[chat_id]["payment_in_progress"] = False
     except Exception as e:
         logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
+    # Reset completa del dato dell'ordine: non ci sono servizi e l'ordine è segnato come completato.
+    user_data[chat_id] = {
+        "services": [],
+        "current_service": None,
+        "mode": "normal",
+        "payment_in_progress": False,
+        "order_completed": True
+    }
 
 import common
 common.notify_user_payment_success = notify_user_payment_success
