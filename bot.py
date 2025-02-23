@@ -161,14 +161,11 @@ def compute_price(service_type, delivery, total_minutes):
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato e il tuo ordine è stato completato. Puoi iniziare un nuovo ordine.")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Rimuovi completamente lo stato precedente per questo utente, se esiste
-    if chat_id in user_data:
-        del user_data[chat_id]
-    # Reinizializza lo stato per consentire un nuovo ordine
-    init_user_data(chat_id)
+    # Resetta automaticamente lo stato dell'utente senza richiedere l'annullamento manuale
+    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
 
 ###############################################
 # HANDLER DEL BOT
