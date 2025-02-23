@@ -2,16 +2,7 @@ import logging
 import threading
 from telebot import TeleBot, types
 import paypalrestsdk
-
-# Imposta il livello di log per il debug
-logging.basicConfig(level=logging.DEBUG)
-
-# Configura PayPal SDK anche in bot.py (necessario per la creazione dei pagamenti)
-paypalrestsdk.configure({
-    "mode": "live",
-    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
-    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
-})
+from common import save_mapping
 
 # Token reale del bot
 TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
@@ -35,7 +26,6 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]["mode"] = "normal"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # I bottoni devono avere il testo esatto usato negli handler
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -107,10 +97,13 @@ def notify_user_payment_success(chat_id):
     init_user_data(chat_id)
     logging.debug("Stato dopo il reset per chat_id %s: %s", chat_id, user_data[chat_id])
 
+# Colleghiamo la funzione di notifica al modulo common per essere usata dal server Flask
+import common
+common.notify_user_payment_success = notify_user_payment_success
+
 @bot.message_handler(commands=["start"])
 def welcome(message):
     chat_id = message.chat.id
-    # Reset dell'ordine per ogni comando /start
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     pricing_text = (
         "Benvenuto/a su 'Appunti Perfetti – Trascrizioni Veloci e Accurate'!\n\n"
@@ -328,7 +321,6 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        from server import save_mapping
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
