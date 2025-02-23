@@ -1,4 +1,5 @@
 import threading
+import sys
 from bot import bot
 from server import app
 
@@ -7,6 +8,10 @@ def run_flask():
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
 
 if __name__ == '__main__':
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    bot.polling(none_stop=True)
+    try:
+        flask_thread = threading.Thread(target=run_flask)
+        flask_thread.start()
+        bot.polling(none_stop=True)
+    except KeyboardInterrupt:
+        print("Interruzione dell'esecuzione con Ctrl+C. Chiusura in corso...")
+        sys.exit(0)
