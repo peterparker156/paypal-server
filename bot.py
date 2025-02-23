@@ -6,6 +6,13 @@ import paypalrestsdk
 # Imposta il livello di log per il debug
 logging.basicConfig(level=logging.DEBUG)
 
+# Configura PayPal SDK anche in bot.py
+paypalrestsdk.configure({
+    "mode": "live",
+    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
+    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
+})
+
 # Token reale del bot
 TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
 bot = TeleBot(TOKEN)
@@ -28,7 +35,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]["mode"] = "normal"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # I bottoni da visualizzare devono avere lo stesso testo usato negli handler
+    # I bottoni devono avere il testo esatto usato negli handler
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -337,11 +344,6 @@ def pay_with_paypal(message):
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
-
-# Handler catch-all per debug (opzionale, da disattivare in produzione)
-# @bot.message_handler(func=lambda message: True)
-# def catch_all(message):
-#     logging.debug("Messaggio ricevuto: %s", message.text)
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
