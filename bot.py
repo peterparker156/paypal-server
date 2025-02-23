@@ -13,7 +13,6 @@ user_data = {}
 
 def init_user_data(chat_id):
     if chat_id not in user_data:
-        # Aggiungiamo i flag per il pagamento
         user_data[chat_id] = {
             "services": [],
             "current_service": None,
@@ -21,6 +20,16 @@ def init_user_data(chat_id):
             "payment_in_progress": False,
             "order_completed": False
         }
+
+def check_order_status(chat_id):
+    """
+    Se l'ordine è già completato, informa l'utente di premere /start per un nuovo ordine
+    e restituisce True.
+    """
+    if user_data.get(chat_id, {}).get("order_completed"):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziarne uno nuovo.")
+        return True
+    return False
 
 def upload_to_drive(file_path, chat_id):
     try:
@@ -31,7 +40,7 @@ def upload_to_drive(file_path, chat_id):
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
-    # Se è stato completato un ordine, non mostriamo la tastiera:
+    # Se l'ordine è già completato, non mostriamo la tastiera
     if user_data[chat_id].get("order_completed"):
         bot.send_message(chat_id, "Per iniziare un nuovo ordine, premi /start.")
         return
@@ -91,7 +100,7 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
-# Notifica di pagamento: rimuove la tastiera e informa l'utente di premere /start per un nuovo ordine.
+# La notifica di successo rimuove la tastiera e segnala all'utente di premere /start
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
@@ -102,20 +111,18 @@ def notify_user_payment_success(chat_id):
             "Per iniziare un nuovo ordine, premi /start.",
             reply_markup=markup
         )
-        # Segnaliamo che l'ordine è completato e resettiamo il flag di pagamento in corso.
         user_data[chat_id]["order_completed"] = True
         user_data[chat_id]["payment_in_progress"] = False
     except Exception as e:
         logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
 
-# Colleghiamo la funzione di notifica al modulo common per essere usata dal server Flask
 import common
 common.notify_user_payment_success = notify_user_payment_success
 
 @bot.message_handler(commands=["start"])
 def welcome(message):
     chat_id = message.chat.id
-    # Reinizializza completamente lo stato per un nuovo ordine.
+    # Reinizializza completamente lo stato per un nuovo ordine
     user_data[chat_id] = {
         "services": [],
         "current_service": None,
@@ -135,9 +142,7 @@ def welcome(message):
 def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    # Se l'ordine è già completato, non permettiamo di aggiungere altri servizi.
-    if user_data[chat_id].get("order_completed"):
-        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziarne uno nuovo.")
+    if check_order_status(chat_id):
         return
     user_data[chat_id]["current_service"] = {"name": message.text.strip()}
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
@@ -151,12 +156,16 @@ def select_service(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "🔙 Indietro")
 def go_back(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     send_service_selection(chat_id)
 
 @bot.message_handler(func=lambda message: message.text and message.text.strip() in ["Economico", "Standard", "Urgente"])
 def select_delivery(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     if not user_data[chat_id]["current_service"]:
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato. Seleziona un servizio prima.")
@@ -167,6 +176,8 @@ def select_delivery(message):
 @bot.message_handler(func=lambda message: message.text and ':' in message.text)
 def insert_duration(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     current = user_data[chat_id]["current_service"]
     if not current or "delivery" not in current:
@@ -214,6 +225,8 @@ def process_file(chat_id):
 @bot.message_handler(content_types=["document"])
 def handle_document(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     current = user_data[chat_id]["current_service"]
     if not current or not current.get("file_requested", False):
@@ -240,6 +253,8 @@ def handle_document(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "❌ Rimuovi un servizio")
 def remove_service(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     user_data[chat_id]["mode"] = "remove"
     if not user_data[chat_id]["services"]:
@@ -255,6 +270,8 @@ def remove_service(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip().isdigit() and user_data.get(message.chat.id, {}).get("mode") == "remove")
 def confirm_remove_service(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     idx = int(message.text.strip()) - 1
     if 0 <= idx < len(user_data[chat_id]["services"]):
@@ -268,6 +285,8 @@ def confirm_remove_service(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "📋 Riepilogo")
 def show_summary(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     if not user_data[chat_id]["services"]:
         bot.send_message(chat_id, "⚠️ Non hai ancora aggiunto servizi.")
@@ -284,6 +303,8 @@ def show_summary(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     total_price = sum(s["price"] for s in user_data[chat_id]["services"])
     if total_price == 0:
@@ -301,6 +322,8 @@ def conclude_order(message):
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "❌ Annulla Ordine")
 def cancel_order(message):
     chat_id = message.chat.id
+    if check_order_status(chat_id):
+        return
     init_user_data(chat_id)
     user_data[chat_id] = {
         "services": [],
@@ -311,16 +334,13 @@ def cancel_order(message):
     }
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-# Gestore del pagamento con flag per evitare doppie richieste e bloccare ulteriori operazioni se l'ordine è completato.
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    # Se l'ordine è già completato, informiamo l'utente.
     if user_data[chat_id].get("order_completed"):
         bot.send_message(chat_id, "Il pagamento è già stato completato. Premi /start per iniziare un nuovo ordine.")
         return
-    # Se è in corso una richiesta di pagamento, attendi.
     if user_data[chat_id].get("payment_in_progress"):
         bot.send_message(chat_id, "Il pagamento è in corso, attendi il completamento.")
         return
@@ -333,7 +353,6 @@ def pay_with_paypal(message):
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
 
-    # Imposta il flag per evitare doppie richieste
     user_data[chat_id]["payment_in_progress"] = True
 
     payment = paypalrestsdk.Payment({
@@ -378,7 +397,9 @@ def pay_with_paypal(message):
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
             user_data[chat_id]["payment_in_progress"] = False
     else:
-        bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
+        error_info = payment.error
+        logging.error("Errore nella creazione del pagamento: %s", error_info)
+        bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {error_info}")
         user_data[chat_id]["payment_in_progress"] = False
 
 if __name__ == '__main__':
