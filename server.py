@@ -63,50 +63,56 @@ def execute_payment():
         logging.error("Errore durante il recupero del pagamento: %s", e)
         return f"Errore durante il recupero del pagamento: {e}", 500
 
-    if payment.execute({"payer_id": payer_id}):
+    try:
+        success = payment.execute({"payer_id": payer_id})
+        if not success:
+            logging.error("Errore nella chiamata execute: %s", payment.error)
+            return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
         logging.debug("Pagamento eseguito correttamente")
-        chat_id = None
-        try:
-            transactions = payment_dict.get("transactions")
-            if transactions and len(transactions) > 0:
-                custom_value = transactions[0].get("custom")
-                logging.debug("Valore custom trovato: %s", custom_value)
-                if custom_value:
-                    chat_id = custom_value
-                else:
-                    chat_id = get_mapping(payment.id)
-                    if chat_id:
-                        logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
-                    else:
-                        logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
+    except Exception as e:
+        logging.error("Eccezione durante payment.execute: %s", e)
+        return f"Eccezione durante l'esecuzione del pagamento: {e}", 500
+
+    chat_id = None
+    try:
+        transactions = payment_dict.get("transactions")
+        if transactions and len(transactions) > 0:
+            custom_value = transactions[0].get("custom")
+            logging.debug("Valore custom trovato: %s", custom_value)
+            if custom_value:
+                chat_id = custom_value
             else:
-                logging.error("Nessuna transazione trovata nel payment object.")
-        except Exception as e:
-            logging.error("Errore nel recupero di chat_id: %s", e)
-        if chat_id:
-            from bot import notify_user_payment_success
-            notify_user_payment_success(int(chat_id))
-            logging.debug("Reset dell'ordine completato per chat_id %s", chat_id)
+                chat_id = get_mapping(payment.id)
+                if chat_id:
+                    logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
+                else:
+                    logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
         else:
-            logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
-        return '''
-        <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Pagamento Confermato</title>
-            </head>
-            <body style="text-align: center; margin-top: 50px;">
-                <h1>Pagamento confermato!</h1>
-                <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
-                <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
-                    <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
-                </a>
-            </body>
-        </html>
-        ''', 200
+            logging.error("Nessuna transazione trovata nel payment object.")
+    except Exception as e:
+        logging.error("Errore nel recupero di chat_id: %s", e)
+
+    if chat_id:
+        from bot import notify_user_payment_success
+        notify_user_payment_success(int(chat_id))
+        logging.debug("Reset dell'ordine completato per chat_id %s", chat_id)
     else:
-        logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
-        return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
+        logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
+    return '''
+    <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Pagamento Confermato</title>
+        </head>
+        <body style="text-align: center; margin-top: 50px;">
+            <h1>Pagamento confermato!</h1>
+            <p>Il tuo pagamento è stato eseguito con successo. L'ordine è andato a buon fine.</p>
+            <a href="https://t.me/AppuntiPerfettiBot" target="_blank">
+                <button style="padding: 10px 20px; font-size: 16px;">Torna al Bot</button>
+            </a>
+        </body>
+    </html>
+    ''', 200
 
 @app.route('/payment/cancel', methods=['GET'])
 def cancel_payment():
