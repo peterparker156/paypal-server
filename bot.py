@@ -6,7 +6,7 @@ import paypalrestsdk
 # Imposta il livello di log per il debug
 logging.basicConfig(level=logging.DEBUG)
 
-# Configura PayPal SDK anche in bot.py
+# Configura PayPal SDK anche in bot.py (necessario per la creazione dei pagamenti)
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
