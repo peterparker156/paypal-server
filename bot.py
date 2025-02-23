@@ -28,6 +28,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]["mode"] = "normal"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # I bottoni da visualizzare devono avere lo stesso testo usato negli handler
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -322,7 +323,7 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        from server import save_mapping  # Importazione ritardata
+        from server import save_mapping
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
@@ -336,6 +337,11 @@ def pay_with_paypal(message):
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
+
+# Handler catch-all per debug (opzionale, da disattivare in produzione)
+# @bot.message_handler(func=lambda message: True)
+# def catch_all(message):
+#     logging.debug("Messaggio ricevuto: %s", message.text)
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
