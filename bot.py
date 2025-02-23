@@ -43,9 +43,9 @@ def save_mapping(payment_id, chat_id):
             (payment_id, chat_id)
         )
 
-# Configura il PayPal SDK in modalità live (usa "sandbox" per testare)
+# Configura il PayPal SDK in modalità live (usa "sandbox" per test)
 paypalrestsdk.configure({
-    "mode": "live",  # oppure "sandbox" per test
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -59,7 +59,7 @@ def init_user_data(chat_id):
             'services': [],
             'current_service': None,
             'mode': 'normal',
-            'paid': False  # flag per indicare se il pagamento è già stato eseguito
+            'paid': False
         }
 
 def get_service():
@@ -98,7 +98,6 @@ def upload_to_drive(file_path, chat_id):
     except Exception as e:
         return f"⚠️ Errore durante il caricamento: {e}"
 
-# Funzione per inviare la tastiera di selezione dei servizi (di default, senza bottoni di pagamento)
 def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
@@ -161,7 +160,7 @@ def compute_price(service_type, delivery, total_minutes):
 # FUNZIONE PER NOTIFICARE IL PAGAMENTO
 ###############################################
 def notify_user_payment_success(chat_id):
-    # Assicuriamoci che i dati per chat_id siano inizializzati
+    # Se il chat_id non è presente in user_data lo inizializzo
     if chat_id not in user_data:
         init_user_data(chat_id)
     try:
