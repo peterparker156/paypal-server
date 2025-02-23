@@ -108,7 +108,7 @@ def notify_user_payment_success(chat_id):
         )
     except Exception as e:
         logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
-    # Reset completa dell'ordine: l'utente non potrà interagire con l'ordine completato
+    # Reset completo dell'ordine: l'utente non può interagire ulteriormente
     user_data[chat_id] = {
         "services": [],
         "current_service": None,
@@ -384,8 +384,8 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        # Logga il debug_id se presente
-        debug_id = payment.get("debug_id", None)
+        # Utilizziamo getattr per leggere il debug_id, se presente
+        debug_id = getattr(payment, "debug_id", None)
         if debug_id:
             logging.debug("PayPal debug_id: %s", debug_id)
         save_mapping(payment.id, str(chat_id))
@@ -408,3 +408,4 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
+
