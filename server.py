@@ -7,12 +7,10 @@ import psycopg2
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
-# Leggi la stringa di connessione dal database dalle variabili d'ambiente
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise Exception("DATABASE_URL non è impostato")
 
-# Crea la connessione al database PostgreSQL
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -51,8 +49,8 @@ def home():
 
 @app.route('/payment/execute', methods=['GET'])
 def execute_payment():
-    payment_id = request.args.get('paymentId')
-    payer_id = request.args.get('PayerID')
+    payment_id = request.args.get("paymentId")
+    payer_id = request.args.get("PayerID")
     logging.debug("Esecuzione pagamento: paymentId=%s, PayerID=%s", payment_id, payer_id)
     if not payment_id or not payer_id:
         return "Errore: Mancano i parametri necessari", 400
@@ -114,19 +112,17 @@ def execute_payment():
 def cancel_payment():
     return "Pagamento annullato", 200
 
-@app.route('/webhook', methods=['POST'])
+@app.route("/webhook", methods=["POST"])
 def paypal_webhook():
     event_body = request.get_json()
     if not event_body:
-        return jsonify({'error': 'No data received'}), 400
-
-    event_type = event_body.get('event_type', 'N/D')
+        return jsonify({"error": "No data received"}), 400
+    event_type = event_body.get("event_type", "N/D")
     logging.debug("Webhook ricevuto: %s", event_body)
     logging.debug("Tipo evento: %s", event_type)
-    
     if event_type == "PAYMENT.SALE.COMPLETED":
         try:
-            payment_id = event_body.get('resource', {}).get('parent_payment')
+            payment_id = event_body.get("resource", {}).get("parent_payment")
             if payment_id:
                 payment = paypalrestsdk.Payment.find(payment_id)
                 payment_dict = payment.to_dict()
@@ -156,14 +152,12 @@ def paypal_webhook():
         logging.info("Evento PAYMENT.CREATED ricevuto. Nessuna azione intrapresa.")
     else:
         logging.info("Evento non gestito: %s", event_type)
-        
-    return jsonify({'status': 'success'}), 200
+    return jsonify({"status": "success"}), 200
 
-@app.route('/webhook/paypal', methods=['POST'])
-@app.route('/webhook/paypal/', methods=['POST'])
+@app.route("/webhook/paypal", methods=["POST"])
+@app.route("/webhook/paypal/", methods=["POST"])
 def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# In produzione Gunicorn esegue questo file importando l'istanza 'app' senza eseguire un blocco __main__.
-
+# Gunicorn in produzione importerà questo file per ottenere l'istanza 'app'.
