@@ -34,7 +34,7 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configura il PayPal SDK (usa "sandbox" per testare, "live" per produzione)
+# Configurazione PayPal in modalità live
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
