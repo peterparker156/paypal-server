@@ -80,22 +80,19 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
+# La funzione di notifica ora invia il messaggio senza resettare lo stato;
+# l'utente dovrà premere /start per iniziare un nuovo ordine.
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         markup = types.ReplyKeyboardRemove()
         bot.send_message(
             chat_id,
-            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!\n\nPer iniziare un nuovo ordine, premi /start.",
+            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\n\nPer iniziare un nuovo ordine, premi /start.",
             reply_markup=markup
         )
     except Exception as e:
         logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
-    if chat_id in user_data:
-        logging.debug("Stato ordine prima del reset per chat_id %s: %s", chat_id, user_data[chat_id])
-        del user_data[chat_id]
-    init_user_data(chat_id)
-    logging.debug("Stato dopo il reset per chat_id %s: %s", chat_id, user_data[chat_id])
 
 # Colleghiamo la funzione di notifica al modulo common per essere usata dal server Flask
 import common
@@ -283,10 +280,16 @@ def cancel_order(message):
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
+# Modifica nel gestore del pagamento:
+# - Se lo stato dell'ordine non è presente o non contiene servizi, avvisa l'utente e non esegue il pagamento.
+# - Non reinizializziamo lo stato dell'ordine qui, mantenendo la logica che richiede /start dopo il pagamento.
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
-    init_user_data(chat_id)
+    if chat_id not in user_data or not user_data[chat_id].get("services"):
+        bot.send_message(chat_id, "⚠️ Ordine non trovato. Premi /start per iniziare un nuovo ordine.")
+        return
+
     total_price = sum(s["price"] for s in user_data[chat_id]["services"])
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
