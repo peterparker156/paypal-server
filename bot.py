@@ -58,7 +58,8 @@ def init_user_data(chat_id):
         user_data[chat_id] = {
             'services': [],
             'current_service': None,
-            'mode': 'normal'
+            'mode': 'normal',
+            'paid': False  # flag per indicare se il pagamento è già stato eseguito
         }
 
 def get_service():
@@ -97,10 +98,12 @@ def upload_to_drive(file_path, chat_id):
     except Exception as e:
         return f"⚠️ Errore durante il caricamento: {e}"
 
+# Funzione per inviare la tastiera di selezione dei servizi (quella di default)
 def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # Tastiera predefinita (senza "💳 Paga con PayPal" e "❌ Annulla Ordine")
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -156,7 +159,7 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# FUNZIONE PER NOTIFICARE L'UTENTE (AGGIORNATA)
+# FUNZIONE PER NOTIFICARE IL PAGAMENTO E COMPLETARE L'ORDINE
 ###############################################
 def notify_user_payment_success(chat_id):
     try:
@@ -164,12 +167,9 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Rimuovi completamente lo stato precedente per questo utente, se esiste
-    if chat_id in user_data:
-        del user_data[chat_id]
-    # Reinizializza lo stato per consentire un nuovo ordine
-    init_user_data(chat_id)
-    # Invia subito la tastiera di selezione dei servizi (senza "💳 Paga con PayPal" e "❌ Annulla Ordine")
+    # Imposta il flag 'paid' per indicare che il pagamento è già stato eseguito
+    user_data[chat_id]['paid'] = True
+    # Invia la tastiera predefinita (senza i bottoni di pagamento)
     send_service_selection(chat_id)
 
 ###############################################
@@ -335,6 +335,7 @@ def confirm_remove_service(message):
     user_data[chat_id]['mode'] = "normal"
     show_summary(message)
 
+# Modifica dell'handler "Riepilogo": viene inviato il riepilogo e la tastiera predefinita (senza i bottoni di pagamento)
 @bot.message_handler(func=lambda message: message.text == "📋 Riepilogo")
 def show_summary(message):
     chat_id = message.chat.id
@@ -347,41 +348,50 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
-    bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
+    bot.send_message(chat_id, text, parse_mode='Markdown')
+    send_service_selection(chat_id)
 
+# Handler "Concludi": se l'ordine è già pagato, informa l'utente; altrimenti mostra i bottoni di pagamento
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
-    init_user_data(chat_id)
-    total_price = sum(s['price'] for s in user_data[chat_id]['services'])
-    if total_price == 0:
-        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
+    if user_data[chat_id].get('paid'):
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
         send_service_selection(chat_id)
+        return
+    total_price = sum(s['price'] for s in user_data.get(chat_id, {}).get('services', []))
+    if total_price == 0:
+        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento. Se hai già pagato, premi /start per avviare un nuovo ordine.")
         return
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}\n\nSe vuoi procedere con il pagamento, clicca su '💳 Paga con PayPal'."
+    # Qui, dopo aver cliccato "Concludi", compaiono i bottoni per il pagamento e l'annullamento
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
+# Handler "Annulla Ordine": se l'ordine è già pagato, non permette di annullarlo
 @bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
 def cancel_order(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine e non puoi annullarlo.")
+        send_service_selection(chat_id)
+        return
     init_user_data(chat_id)
-    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-###############################################
-# HANDLER PER IL PAGAMENTO CON PAYPAL
-###############################################
+# Handler "Paga con PayPal": se l'ordine risulta già pagato, informa l'utente
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
-    init_user_data(chat_id)
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
+        send_service_selection(chat_id)
+        return
     total_price = sum(s['price'] for s in user_data[chat_id]['services'])
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
