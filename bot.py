@@ -159,23 +159,23 @@ def compute_price(service_type, delivery, total_minutes):
 ###############################################
 # FUNZIONE PER NOTIFICARE IL PAGAMENTO
 ###############################################
+def reset_order(chat_id):
+    # Resetta lo stato dell'ordine per consentire un nuovo ordine
+    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
+    send_service_selection(chat_id)
+
 def notify_user_payment_success(chat_id):
-    # Se il chat_id non esiste, lo inizializzo
     if chat_id not in user_data:
         init_user_data(chat_id)
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\nPer iniziare un nuovo ordine, premi /start.")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Reset dello stato dell'ordine per consentire un nuovo ordine
-    user_data[chat_id] = {
-        'services': [],
-        'current_service': None,
-        'mode': 'normal',
-        'paid': False
-    }
-    send_service_selection(chat_id)
+    # Impediamo la ripetizione del pagamento per l'ordine corrente
+    user_data[chat_id]['paid'] = True
+    # Avvia un timer per resettare lo stato dopo 10 secondi (puoi modificare il tempo a tuo piacimento)
+    threading.Timer(10.0, reset_order, args=(chat_id,)).start()
 
 ###############################################
 # HANDLER DEL BOT
@@ -358,13 +358,13 @@ def show_summary(message):
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
+    # Se l'ordine risulta già pagato, blocca il pagamento e invita a digitare /start per un nuovo ordine
     if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
-        send_service_selection(chat_id)
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine. Premi /start per un nuovo ordine.")
         return
     total_price = sum(s['price'] for s in user_data.get(chat_id, {}).get('services', []))
     if total_price == 0:
-        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento. Se hai già pagato, premi /start per avviare un nuovo ordine.")
+        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento. Premi /start per avviare un nuovo ordine.")
         return
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
@@ -378,8 +378,7 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine e non puoi annullarlo.")
-        send_service_selection(chat_id)
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine e non puoi annullarlo.\nPremi /start per un nuovo ordine.")
         return
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
@@ -389,12 +388,11 @@ def cancel_order(message):
 def pay_with_paypal(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
-        send_service_selection(chat_id)
+        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine. Premi /start per un nuovo ordine.")
         return
     total_price = sum(s['price'] for s in user_data[chat_id]['services'])
     if total_price <= 0:
-        bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
+        bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare. Premi /start per un nuovo ordine.")
         return
 
     payment = paypalrestsdk.Payment({
