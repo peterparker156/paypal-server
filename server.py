@@ -16,7 +16,6 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzioni per gestire la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -35,7 +34,6 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -76,7 +74,7 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    chat_id = custom_value  # salvato come stringa
+                    chat_id = custom_value
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
@@ -88,7 +86,7 @@ def execute_payment():
         except Exception as e:
             logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
-            from bot import notify_user_payment_success  # Importazione ritardata
+            from bot import notify_user_payment_success
             notify_user_payment_success(int(chat_id))
             logging.debug("Reset dell'ordine completato per chat_id %s", chat_id)
         else:
@@ -167,4 +165,5 @@ def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# Non includere alcun blocco "if __name__ == '__main__':" poiché in produzione Gunicorn gestisce l'esecuzione.
+# In produzione Gunicorn esegue questo file importando l'istanza 'app' senza eseguire un blocco __main__.
+
