@@ -167,7 +167,7 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\nPremi /start per iniziare un nuovo ordine.")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Impediamo ulteriori modifiche: lasciamo il flag paid su True (e non resettiamo lo stato)
+    # Impediamo ulteriori modifiche all'ordine corrente
     user_data[chat_id]['paid'] = True
 
 ###############################################
@@ -176,7 +176,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
-    # Reset dello stato per iniziare un nuovo ordine
+    # Reset dello stato per un nuovo ordine
     init_user_data(chat_id)
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
@@ -208,7 +208,7 @@ def welcome(message):
 def select_service(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
         return
     init_user_data(chat_id)
     user_data[chat_id]['current_service'] = {'name': message.text}
@@ -395,7 +395,7 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già completato il pagamento per questo ordine e non puoi annullarlo. Premi /start per un nuovo ordine.")
+        bot.send_message(chat_id, "Hai già completato il pagamento per questo ordine e non puoi annullarlo.\nPremi /start per un nuovo ordine.")
         return
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
