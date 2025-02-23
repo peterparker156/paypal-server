@@ -3,6 +3,9 @@ import threading
 from telebot import TeleBot, types
 import paypalrestsdk
 
+# Imposta il livello di log (DEBUG per troubleshooting)
+logging.basicConfig(level=logging.DEBUG)
+
 # Token reale del bot
 TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
 bot = TeleBot(TOKEN)
@@ -16,7 +19,7 @@ def init_user_data(chat_id):
 
 def upload_to_drive(file_path, chat_id):
     try:
-        # Inserisci qui la logica per caricare il file su Google Drive
+        # Qui inserisci la logica per caricare il file su Google Drive
         return "✅ File caricato correttamente"
     except Exception as e:
         return f"⚠️ Errore durante il caricamento: {e}"
@@ -85,7 +88,6 @@ def compute_price(service_type, delivery, total_minutes):
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        # Rimuove la tastiera per non mostrare i pulsanti relativi all'ordine completato
         markup = types.ReplyKeyboardRemove()
         bot.send_message(
             chat_id,
@@ -94,10 +96,12 @@ def notify_user_payment_success(chat_id):
         )
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Reset dello stato per l'utente
+    # Log dello stato prima del reset
     if chat_id in user_data:
+        logging.debug("Stato ordine prima del reset per chat_id %s: %s", chat_id, user_data[chat_id])
         del user_data[chat_id]
     init_user_data(chat_id)
+    logging.debug("Stato dopo il reset per chat_id %s: %s", chat_id, user_data[chat_id])
 
 ###############################################
 # HANDLER DEL BOT
@@ -105,7 +109,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
-    # Forza il reset dell'ordine ogni volta che viene chiamato /start
+    # Reset dell'ordine per ogni comando /start
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
@@ -344,7 +348,6 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        # Salva la mapping nel database
         from server import save_mapping  # Importazione ritardata
         save_mapping(payment.id, str(chat_id))
         approval_url = None
