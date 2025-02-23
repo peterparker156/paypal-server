@@ -35,7 +35,7 @@ def send_service_selection(chat_id):
     init_user_data(chat_id)
     user_data[chat_id]["mode"] = "normal"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    # Tastiera standard: non include i pulsanti di pagamento
+    # I bottoni devono avere il testo esatto usato negli handler
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
     markup.add(*buttons)
     bot.send_message(chat_id, "Seleziona il servizio:", reply_markup=markup)
@@ -110,6 +110,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=["start"])
 def welcome(message):
     chat_id = message.chat.id
+    # Reset dell'ordine per ogni comando /start
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     pricing_text = (
         "Benvenuto/a su 'Appunti Perfetti – Trascrizioni Veloci e Accurate'!\n\n"
@@ -221,7 +222,6 @@ def handle_document(message):
     current["file_timer"] = timer
     timer.start()
 
-# Handler per il tasto "❌ Rimuovi un servizio"
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "❌ Rimuovi un servizio")
 def remove_service(message):
     chat_id = message.chat.id
@@ -230,7 +230,6 @@ def remove_service(message):
     if not user_data[chat_id]["services"]:
         bot.send_message(chat_id, "⚠️ Non hai servizi da rimuovere.")
         user_data[chat_id]["mode"] = "normal"
-        send_service_selection(chat_id)
         return
     text = "Scrivi il numero del servizio da rimuovere:\n"
     for idx, service in enumerate(user_data[chat_id]["services"]):
@@ -238,7 +237,6 @@ def remove_service(message):
         text += f"{idx+1}. {service['name']} - {delivery} ({service.get('duration','N/A')})\n"
     bot.send_message(chat_id, text)
 
-# Handler per confermare la rimozione (quando l'utente inserisce un numero)
 @bot.message_handler(func=lambda message: message.text and message.text.strip().isdigit() and user_data.get(message.chat.id, {}).get("mode") == "remove")
 def confirm_remove_service(message):
     chat_id = message.chat.id
@@ -250,8 +248,7 @@ def confirm_remove_service(message):
     else:
         bot.send_message(chat_id, "⚠️ Numero non valido.")
     user_data[chat_id]["mode"] = "normal"
-    # Dopo la rimozione, mostra la tastiera standard (senza i pulsanti di pagamento)
-    send_service_selection(chat_id)
+    show_summary(message)
 
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "📋 Riepilogo")
 def show_summary(message):
@@ -265,7 +262,6 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]["services"]):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    # Tastiera con pulsanti di pagamento (questo handler viene usato quando l'utente vuole visualizzare il riepilogo con la possibilità di pagare)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
@@ -293,10 +289,7 @@ def cancel_order(message):
     init_user_data(chat_id)
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
-    
-###############################################
-# HANDLER PER IL PAGAMENTO CON PAYPAL
-###############################################
+
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
