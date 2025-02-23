@@ -1,12 +1,11 @@
 import logging
 import threading
 from telebot import TeleBot, types
-import paypalrestsdk
-from common import save_mapping
 
 # Token reale del bot
 TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
 bot = TeleBot(TOKEN)
+logging.basicConfig(level=logging.DEBUG)
 
 # Stato globale degli utenti
 user_data = {}
@@ -26,13 +25,6 @@ def check_order_status(chat_id):
         bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziarne uno nuovo.")
         return True
     return False
-
-def upload_to_drive(file_path, chat_id):
-    try:
-        # Inserisci qui la logica per caricare il file su Google Drive
-        return "✅ File caricato correttamente"
-    except Exception as e:
-        return f"⚠️ Errore durante il caricamento: {e}"
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
@@ -94,31 +86,6 @@ def compute_price(service_type, delivery, total_minutes):
             elif delivery == "Urgente":
                 return 0.70
     return 0.40
-
-# Dopo il pagamento, resettiamo completamente lo stato utente
-def notify_user_payment_success(chat_id):
-    try:
-        logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        markup = types.ReplyKeyboardRemove()
-        bot.send_message(
-            chat_id,
-            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\n\n"
-            "Per iniziare un nuovo ordine, premi /start.",
-            reply_markup=markup
-        )
-    except Exception as e:
-        logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
-    # Reset completo dell'ordine: l'utente non può interagire ulteriormente
-    user_data[chat_id] = {
-        "services": [],
-        "current_service": None,
-        "mode": "normal",
-        "payment_in_progress": False,
-        "order_completed": True
-    }
-
-import common
-common.notify_user_payment_success = notify_user_payment_success
 
 @bot.message_handler(commands=["start"])
 def welcome(message):
@@ -209,7 +176,7 @@ def process_file(chat_id):
     downloaded_file = bot.download_file(file_info.file_path)
     with open(file_path, "wb") as new_file:
         new_file.write(downloaded_file)
-    result = upload_to_drive(file_path, chat_id)
+    result = "✅ File caricato correttamente"  # Sostituisci con la logica di upload se presente
     if result.startswith("✅"):
         current["file"] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
@@ -384,10 +351,11 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
-        # Utilizziamo getattr per leggere il debug_id, se presente
+        # Utilizziamo getattr per leggere eventuale debug_id
         debug_id = getattr(payment, "debug_id", None)
         if debug_id:
             logging.debug("PayPal debug_id: %s", debug_id)
+        from common import save_mapping
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
@@ -408,4 +376,3 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
-
