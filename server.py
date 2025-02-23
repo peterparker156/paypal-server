@@ -16,6 +16,7 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
+# Funzioni per gestire la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -34,7 +35,7 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configurazione PayPal in modalità live
+# Configura il PayPal SDK in modalità live
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -48,7 +49,7 @@ def handle_root_post():
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Your service is live 🎉", 200
+    return "Server attivo!"
 
 @app.route('/payment/execute', methods=['GET'])
 def execute_payment():
@@ -75,17 +76,10 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    try:
-                        chat_id = int(custom_value)
-                    except ValueError:
-                        chat_id = custom_value
+                    chat_id = custom_value  # trattato come stringa
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
-                        try:
-                            chat_id = int(chat_id)
-                        except ValueError:
-                            pass
                         logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
                     else:
                         logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
@@ -94,7 +88,7 @@ def execute_payment():
         except Exception as e:
             logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
-            from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli di importazione
+            from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli
             notify_user_payment_success(chat_id)
         else:
             logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
@@ -143,17 +137,10 @@ def paypal_webhook():
                     logging.debug("Valore custom nel webhook SALE COMPLETED: %s", custom_value)
                     chat_id = None
                     if custom_value:
-                        try:
-                            chat_id = int(custom_value)
-                        except ValueError:
-                            chat_id = custom_value
+                        chat_id = custom_value
                     else:
                         chat_id = get_mapping(payment.id)
                         if chat_id:
-                            try:
-                                chat_id = int(chat_id)
-                            except ValueError:
-                                pass
                             logging.debug("Recuperato chat_id dalla mapping DB nel webhook: %s", chat_id)
                         else:
                             logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
@@ -179,5 +166,4 @@ def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# NOTA: Il blocco di esecuzione diretto è stato rimosso.
