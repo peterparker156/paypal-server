@@ -88,8 +88,9 @@ def execute_payment():
         except Exception as e:
             logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
-            from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli
+            from bot import notify_user_payment_success  # Importazione ritardata
             notify_user_payment_success(int(chat_id))
+            logging.debug("Reset dell'ordine completato per chat_id %s", chat_id)
         else:
             logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
         return '''
@@ -166,4 +167,4 @@ def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# Non includere un blocco "if __name__ == '__main__':" se il deploy è gestito da Gunicorn.
+# Non includere alcun blocco "if __name__ == '__main__':" poiché in produzione Gunicorn gestisce l'esecuzione.
