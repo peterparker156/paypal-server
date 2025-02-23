@@ -159,23 +159,16 @@ def compute_price(service_type, delivery, total_minutes):
 ###############################################
 # FUNZIONE PER NOTIFICARE IL PAGAMENTO
 ###############################################
-def reset_order(chat_id):
-    # Resetta lo stato dell'ordine per consentire un nuovo ordine
-    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
-    send_service_selection(chat_id)
-
 def notify_user_payment_success(chat_id):
     if chat_id not in user_data:
         init_user_data(chat_id)
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\nPer iniziare un nuovo ordine, premi /start.")
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\nPremi /start per iniziare un nuovo ordine.")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Impediamo la ripetizione del pagamento per l'ordine corrente
+    # Impediamo ulteriori modifiche: lasciamo il flag paid su True (e non resettiamo lo stato)
     user_data[chat_id]['paid'] = True
-    # Avvia un timer per resettare lo stato dopo 10 secondi (puoi modificare il tempo a tuo piacimento)
-    threading.Timer(10.0, reset_order, args=(chat_id,)).start()
 
 ###############################################
 # HANDLER DEL BOT
@@ -183,6 +176,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
+    # Reset dello stato per iniziare un nuovo ordine
     init_user_data(chat_id)
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
@@ -213,6 +207,9 @@ def welcome(message):
 @bot.message_handler(func=lambda message: message.text in ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze"])
 def select_service(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
+        return
     init_user_data(chat_id)
     user_data[chat_id]['current_service'] = {'name': message.text}
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
@@ -226,12 +223,18 @@ def select_service(message):
 @bot.message_handler(func=lambda message: message.text == "🔙 Indietro")
 def go_back(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     send_service_selection(chat_id)
 
 @bot.message_handler(func=lambda message: message.text in ["Economico", "Standard", "Urgente"])
 def select_delivery(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     if not user_data[chat_id]['current_service']:
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato. Seleziona un servizio prima.")
@@ -242,6 +245,9 @@ def select_delivery(message):
 @bot.message_handler(func=lambda message: ':' in message.text)
 def insert_duration(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
     if not current or "delivery" not in current:
@@ -289,6 +295,9 @@ def process_file(chat_id):
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     current = user_data[chat_id]['current_service']
     if not current or not current.get('file_requested', False):
@@ -315,6 +324,9 @@ def handle_document(message):
 @bot.message_handler(func=lambda message: message.text == "❌ Rimuovi un servizio")
 def remove_service(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato e non può essere modificato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = "remove"
     if not user_data[chat_id]['services']:
@@ -330,6 +342,9 @@ def remove_service(message):
 @bot.message_handler(func=lambda message: message.text.isdigit() and user_data.get(message.chat.id, {}).get('mode') == "remove")
 def confirm_remove_service(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato e non può essere modificato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     idx = int(message.text) - 1
     if 0 <= idx < len(user_data[chat_id]['services']):
@@ -343,6 +358,9 @@ def confirm_remove_service(message):
 @bot.message_handler(func=lambda message: message.text == "📋 Riepilogo")
 def show_summary(message):
     chat_id = message.chat.id
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per un nuovo ordine.")
+        return
     init_user_data(chat_id)
     if not user_data[chat_id]['services']:
         bot.send_message(chat_id, "⚠️ Non hai ancora aggiunto servizi.")
@@ -358,9 +376,8 @@ def show_summary(message):
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
-    # Se l'ordine risulta già pagato, blocca il pagamento e invita a digitare /start per un nuovo ordine
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine. Premi /start per un nuovo ordine.")
+    if user_data.get(chat_id, {}).get('paid'):
+        bot.send_message(chat_id, "Hai già completato il pagamento per questo ordine. Premi /start per un nuovo ordine.")
         return
     total_price = sum(s['price'] for s in user_data.get(chat_id, {}).get('services', []))
     if total_price == 0:
@@ -378,7 +395,7 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine e non puoi annullarlo.\nPremi /start per un nuovo ordine.")
+        bot.send_message(chat_id, "Hai già completato il pagamento per questo ordine e non puoi annullarlo. Premi /start per un nuovo ordine.")
         return
     init_user_data(chat_id)
     user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
@@ -388,7 +405,7 @@ def cancel_order(message):
 def pay_with_paypal(message):
     chat_id = message.chat.id
     if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine. Premi /start per un nuovo ordine.")
+        bot.send_message(chat_id, "Hai già completato il pagamento per questo ordine. Premi /start per un nuovo ordine.")
         return
     total_price = sum(s['price'] for s in user_data[chat_id]['services'])
     if total_price <= 0:
