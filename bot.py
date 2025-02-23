@@ -3,8 +3,8 @@ import threading
 from telebot import TeleBot, types
 import paypalrestsdk
 
-# Definisci il token del bot
-TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
+# Inserisci il token reale del tuo bot (deve contenere un due punti)
+TOKEN = "123456789:ABCdefGhIJkLMnopQRsTuvWxyZ"  # Sostituisci con il token effettivo
 bot = TeleBot(TOKEN)
 
 # Stato globale degli utenti
@@ -85,10 +85,16 @@ def compute_price(service_type, delivery, total_minutes):
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
+        # Rimuovi la tastiera in modo che l'utente non possa cliccare su pulsanti relativi all'ordine completato
+        markup = types.ReplyKeyboardRemove()
+        bot.send_message(
+            chat_id,
+            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!\n\nPer iniziare un nuovo ordine, premi /start.",
+            reply_markup=markup
+        )
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Resetta lo stato per l'utente
+    # Reset dello stato per l'utente
     if chat_id in user_data:
         del user_data[chat_id]
     init_user_data(chat_id)
