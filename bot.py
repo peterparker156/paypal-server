@@ -161,11 +161,14 @@ def compute_price(service_type, delivery, total_minutes):
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
-        bot.send_message(chat_id, "Il tuo pagamento è stato confermato e il tuo ordine è stato completato. Puoi iniziare un nuovo ordine.")
+        bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Resetta automaticamente lo stato dell'utente per permettere un nuovo ordine
-    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+    # Rimuovi completamente lo stato precedente per questo utente, se esiste
+    if chat_id in user_data:
+        del user_data[chat_id]
+    # Reinizializza lo stato per consentire un nuovo ordine
+    init_user_data(chat_id)
 
 ###############################################
 # HANDLER DEL BOT
@@ -382,38 +385,33 @@ def pay_with_paypal(message):
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
 
-    try:
-        payment = paypalrestsdk.Payment({
-           "intent": "sale",
-           "payer": {"payment_method": "paypal"},
-           "redirect_urls": {
-               "return_url": "https://paypal-server-bafg.onrender.com/payment/execute",
-               "cancel_url": "https://paypal-server-bafg.onrender.com/payment/cancel"
+    payment = paypalrestsdk.Payment({
+       "intent": "sale",
+       "payer": {"payment_method": "paypal"},
+       "redirect_urls": {
+           "return_url": "https://paypal-server-bafg.onrender.com/payment/execute",
+           "cancel_url": "https://paypal-server-bafg.onrender.com/payment/cancel"
+       },
+       "transactions": [{
+           "item_list": {
+               "items": [{
+                   "name": "Servizi Bot",
+                   "sku": "001",
+                   "price": f"{total_price:.2f}",
+                   "currency": "EUR",
+                   "quantity": 1
+               }]
            },
-           "transactions": [{
-               "item_list": {
-                   "items": [{
-                       "name": "Servizi Bot",
-                       "sku": "001",
-                       "price": f"{total_price:.2f}",
-                       "currency": "EUR",
-                       "quantity": 1
-                   }]
-               },
-               "amount": {
-                   "total": f"{total_price:.2f}",
-                   "currency": "EUR"
-               },
-               "description": "Pagamento per i servizi offerti dal bot.",
-               "custom": str(chat_id)
-           }]
-        })
-        logging.debug("Dati pagamento: %s", payment.to_dict())
-    except Exception as e:
-        logging.error("Eccezione durante la creazione del pagamento: %s", e)
-        bot.send_message(chat_id, f"⚠️ Errore durante la creazione del pagamento: {e}")
-        return
+           "amount": {
+               "total": f"{total_price:.2f}",
+               "currency": "EUR"
+           },
+           "description": "Pagamento per i servizi offerti dal bot.",
+           "custom": str(chat_id)
+       }]
+    })
 
+    logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
         # Salva la mapping nel database
@@ -427,10 +425,8 @@ def pay_with_paypal(message):
         if approval_url:
             bot.send_message(chat_id, f"Per completare il pagamento, clicca su questo link:\n{approval_url}")
         else:
-            logging.error("Approval URL non trovato nei dati pagamento: %s", payment.to_dict())
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
     else:
-        logging.error("Errore nella creazione del pagamento: %s", payment.error)
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
 
 if __name__ == '__main__':
