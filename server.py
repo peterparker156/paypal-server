@@ -1,9 +1,29 @@
-from flask import Flask, request, jsonify
+import os
 import logging
+import requests
+from flask import Flask, request, jsonify
 import paypalrestsdk
-from common import save_mapping, get_mapping, notify_user_payment_success
+from common import save_mapping, get_mapping
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
+def send_telegram_notification(chat_id, text):
+    # Recupera il token del bot dall'ambiente o inseriscilo direttamente
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logging.error("TELEGRAM_BOT_TOKEN non impostato")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            logging.info("Notifica Telegram inviata a chat_id %s", chat_id)
+        else:
+            logging.error("Errore invio notifica Telegram a chat_id %s: %s", chat_id, response.text)
+    except Exception as e:
+        logging.error("Errore invio notifica Telegram: %s", e)
 
 @app.route('/', methods=['POST'])
 def handle_root_post():
@@ -60,7 +80,11 @@ def execute_payment():
         logging.error("Errore nel recupero di chat_id: %s", e)
 
     if chat_id:
-        notify_user_payment_success(int(chat_id))
+        # Invia notifica direttamente via Telegram
+        send_telegram_notification(chat_id, 
+            "Il tuo pagamento è stato completato con successo! 🎉\n"
+            "L'ordine è stato concluso. Per iniziare un nuovo ordine, premi /start."
+        )
     else:
         logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
 
@@ -105,7 +129,10 @@ def paypal_webhook():
                     logging.debug("Webhook SALE COMPLETED, custom: %s", custom_value)
                     chat_id = custom_value if custom_value else get_mapping(payment.id)
                     if chat_id:
-                        notify_user_payment_success(int(chat_id))
+                        send_telegram_notification(chat_id, 
+                            "Il tuo pagamento è stato completato con successo! 🎉\n"
+                            "L'ordine è stato concluso. Per iniziare un nuovo ordine, premi /start."
+                        )
                     else:
                         logging.error("Mapping non trovato per payment_id: %s", payment_id)
                 else:
@@ -128,6 +155,5 @@ def paypal_webhook_paypal():
     return paypal_webhook()
 
 if __name__ == '__main__':
-    import os
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
