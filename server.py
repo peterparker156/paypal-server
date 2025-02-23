@@ -34,9 +34,9 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configura il PayPal SDK (se stai testando, usa "sandbox")
+# Configura il PayPal SDK (usa "sandbox" per testare, "live" per produzione)
 paypalrestsdk.configure({
-    "mode": "live",  # oppure "sandbox" per test
+    "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
@@ -48,7 +48,7 @@ def handle_root_post():
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Server attivo!"
+    return "Your service is live 🎉", 200
 
 @app.route('/payment/execute', methods=['GET'])
 def execute_payment():
