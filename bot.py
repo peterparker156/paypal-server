@@ -359,4 +359,3 @@ def pay_with_paypal(message):
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
-
