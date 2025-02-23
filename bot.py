@@ -13,7 +13,14 @@ user_data = {}
 
 def init_user_data(chat_id):
     if chat_id not in user_data:
-        user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
+        # Aggiungiamo i flag per il pagamento
+        user_data[chat_id] = {
+            "services": [],
+            "current_service": None,
+            "mode": "normal",
+            "payment_in_progress": False,
+            "order_completed": False
+        }
 
 def upload_to_drive(file_path, chat_id):
     try:
@@ -24,6 +31,10 @@ def upload_to_drive(file_path, chat_id):
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
+    # Se è stato completato un ordine, non mostriamo la tastiera:
+    if user_data[chat_id].get("order_completed"):
+        bot.send_message(chat_id, "Per iniziare un nuovo ordine, premi /start.")
+        return
     user_data[chat_id]["mode"] = "normal"
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
@@ -80,17 +91,20 @@ def compute_price(service_type, delivery, total_minutes):
                 return 0.70
     return 0.40
 
-# La funzione di notifica ora invia il messaggio senza resettare lo stato;
-# l'utente dovrà premere /start per iniziare un nuovo ordine.
+# Notifica di pagamento: rimuove la tastiera e informa l'utente di premere /start per un nuovo ordine.
 def notify_user_payment_success(chat_id):
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         markup = types.ReplyKeyboardRemove()
         bot.send_message(
             chat_id,
-            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\n\nPer iniziare un nuovo ordine, premi /start.",
+            "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine.\n\n"
+            "Per iniziare un nuovo ordine, premi /start.",
             reply_markup=markup
         )
+        # Segnaliamo che l'ordine è completato e resettiamo il flag di pagamento in corso.
+        user_data[chat_id]["order_completed"] = True
+        user_data[chat_id]["payment_in_progress"] = False
     except Exception as e:
         logging.error("Errore nella notifica per chat_id %s: %s", chat_id, e)
 
@@ -101,7 +115,14 @@ common.notify_user_payment_success = notify_user_payment_success
 @bot.message_handler(commands=["start"])
 def welcome(message):
     chat_id = message.chat.id
-    user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
+    # Reinizializza completamente lo stato per un nuovo ordine.
+    user_data[chat_id] = {
+        "services": [],
+        "current_service": None,
+        "mode": "normal",
+        "payment_in_progress": False,
+        "order_completed": False
+    }
     pricing_text = (
         "Benvenuto/a su 'Appunti Perfetti – Trascrizioni Veloci e Accurate'!\n\n"
         "Hai bisogno di trascrivere lezioni, conferenze o altri contenuti audio?\n"
@@ -114,6 +135,10 @@ def welcome(message):
 def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
+    # Se l'ordine è già completato, non permettiamo di aggiungere altri servizi.
+    if user_data[chat_id].get("order_completed"):
+        bot.send_message(chat_id, "L'ordine è già stato completato. Premi /start per iniziarne uno nuovo.")
+        return
     user_data[chat_id]["current_service"] = {"name": message.text.strip()}
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     if message.text.strip() == "📚 Lezioni":
@@ -277,16 +302,29 @@ def conclude_order(message):
 def cancel_order(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
+    user_data[chat_id] = {
+        "services": [],
+        "current_service": None,
+        "mode": "normal",
+        "payment_in_progress": False,
+        "order_completed": False
+    }
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-# Modifica nel gestore del pagamento:
-# - Se lo stato dell'ordine non è presente o non contiene servizi, avvisa l'utente e non esegue il pagamento.
-# - Non reinizializziamo lo stato dell'ordine qui, mantenendo la logica che richiede /start dopo il pagamento.
+# Gestore del pagamento con flag per evitare doppie richieste e bloccare ulteriori operazioni se l'ordine è completato.
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
-    if chat_id not in user_data or not user_data[chat_id].get("services"):
+    init_user_data(chat_id)
+    # Se l'ordine è già completato, informiamo l'utente.
+    if user_data[chat_id].get("order_completed"):
+        bot.send_message(chat_id, "Il pagamento è già stato completato. Premi /start per iniziare un nuovo ordine.")
+        return
+    # Se è in corso una richiesta di pagamento, attendi.
+    if user_data[chat_id].get("payment_in_progress"):
+        bot.send_message(chat_id, "Il pagamento è in corso, attendi il completamento.")
+        return
+    if not user_data[chat_id].get("services"):
         bot.send_message(chat_id, "⚠️ Ordine non trovato. Premi /start per iniziare un nuovo ordine.")
         return
 
@@ -294,6 +332,9 @@ def pay_with_paypal(message):
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
         return
+
+    # Imposta il flag per evitare doppie richieste
+    user_data[chat_id]["payment_in_progress"] = True
 
     payment = paypalrestsdk.Payment({
        "intent": "sale",
@@ -335,8 +376,10 @@ def pay_with_paypal(message):
             bot.send_message(chat_id, f"Per completare il pagamento, clicca su questo link:\n{approval_url}")
         else:
             bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
+            user_data[chat_id]["payment_in_progress"] = False
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
+        user_data[chat_id]["payment_in_progress"] = False
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
