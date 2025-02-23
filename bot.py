@@ -43,7 +43,7 @@ def save_mapping(payment_id, chat_id):
             (payment_id, chat_id)
         )
 
-# Configura il PayPal SDK in modalità live (usa "sandbox" per test)
+# Configurazione PayPal in modalità live
 paypalrestsdk.configure({
     "mode": "live",
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
@@ -100,7 +100,6 @@ def upload_to_drive(file_path, chat_id):
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
-    # Se l'ordine è già stato pagato, informiamo l'utente che deve avviare un nuovo ordine
     if user_data[chat_id].get('paid'):
         bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
         return
@@ -171,7 +170,6 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Imposta l'ordine come completato
     user_data[chat_id]['paid'] = True
     send_service_selection(chat_id)
 
@@ -181,7 +179,6 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
-    # Resetta i dati per iniziare un nuovo ordine
     user_data[chat_id] = {
         'services': [],
         'current_service': None,
