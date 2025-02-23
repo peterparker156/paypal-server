@@ -160,4 +160,4 @@ def paypal_webhook_paypal():
     logging.debug("Webhook /webhook/paypal ricevuto")
     return paypal_webhook()
 
-# Gunicorn in produzione importerà questo file per ottenere l'istanza 'app'.
+# Gunicorn importerà questo file per ottenere l'istanza 'app'
