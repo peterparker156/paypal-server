@@ -110,6 +110,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=["start"])
 def welcome(message):
     chat_id = message.chat.id
+    # Reset dell'ordine per ogni comando /start
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     pricing_text = (
         "Benvenuto/a su 'Appunti Perfetti – Trascrizioni Veloci e Accurate'!\n\n"
@@ -289,9 +290,6 @@ def cancel_order(message):
     user_data[chat_id] = {"services": [], "current_service": None, "mode": "normal"}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
-###############################################
-# HANDLER PER IL PAGAMENTO CON PAYPAL
-###############################################
 @bot.message_handler(func=lambda message: message.text and message.text.strip() == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
