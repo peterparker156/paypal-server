@@ -16,7 +16,6 @@ if not DATABASE_URL:
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
-# Funzioni per gestire la mapping nel database (chat_id come stringa)
 def save_mapping(payment_id, chat_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -35,14 +34,13 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configura il PayPal SDK in modalità live
+# Configura il PayPal SDK (se stai testando, usa "sandbox")
 paypalrestsdk.configure({
-    "mode": "live",
+    "mode": "live",  # oppure "sandbox" per test
     "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
     "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
 })
 
-# Route di debug per catturare eventuali POST inviati alla radice ("/")
 @app.route('/', methods=['POST'])
 def handle_root_post():
     logging.debug("POST received at root: %s", request.get_data())
@@ -77,10 +75,17 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    chat_id = custom_value  # trattato come stringa
+                    try:
+                        chat_id = int(custom_value)
+                    except ValueError:
+                        chat_id = custom_value
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
+                        try:
+                            chat_id = int(chat_id)
+                        except ValueError:
+                            pass
                         logging.debug("Recuperato chat_id dalla mapping DB: %s", chat_id)
                     else:
                         logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment.id)
@@ -138,10 +143,17 @@ def paypal_webhook():
                     logging.debug("Valore custom nel webhook SALE COMPLETED: %s", custom_value)
                     chat_id = None
                     if custom_value:
-                        chat_id = custom_value
+                        try:
+                            chat_id = int(custom_value)
+                        except ValueError:
+                            chat_id = custom_value
                     else:
                         chat_id = get_mapping(payment.id)
                         if chat_id:
+                            try:
+                                chat_id = int(chat_id)
+                            except ValueError:
+                                pass
                             logging.debug("Recuperato chat_id dalla mapping DB nel webhook: %s", chat_id)
                         else:
                             logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
