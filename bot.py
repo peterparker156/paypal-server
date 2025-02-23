@@ -164,11 +164,10 @@ def notify_user_payment_success(chat_id):
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    # Rimuovi completamente lo stato precedente per questo utente, se esiste
-    if chat_id in user_data:
-        del user_data[chat_id]
-    # Reinizializza lo stato per consentire un nuovo ordine
-    init_user_data(chat_id)
+    # Resetta completamente lo stato dell'utente per consentire un nuovo ordine
+    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
+    # Mostra la tastiera iniziale dei servizi (senza "Paga con PayPal" e "Annulla Ordine")
+    send_service_selection(chat_id)
 
 ###############################################
 # HANDLER DEL BOT
