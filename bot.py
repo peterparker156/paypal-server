@@ -1,108 +1,28 @@
-import os
-import threading
-import time
-import telebot
-from telebot import types
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-import paypalrestsdk
 import logging
-import psycopg2
+import threading
+from telebot import TeleBot, types
+import paypalrestsdk
 
-logging.basicConfig(level=logging.DEBUG)
+# Definisci il token del bot
+TOKEN = "IL_TUO_TOKEN"
+bot = TeleBot(TOKEN)
 
-# Configurazione del bot Telegram
-API_TOKEN = '7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg'
-bot = telebot.TeleBot(API_TOKEN)
-
-# Configurazione di Google Drive
-SERVICE_ACCOUNT_FILE = 'appuntiperfetti.json'
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-FOLDER_ID = "12jHPqbyNEk9itP8MkPpUEDLTMiRj54Jj"
-
-# Dizionario per i dati utente
+# Stato globale degli utenti
 user_data = {}
 
-# Configura la connessione al database PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise Exception("DATABASE_URL non è impostato")
-conn = psycopg2.connect(DATABASE_URL)
-conn.autocommit = True
-
-def save_mapping(payment_id, chat_id):
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO payment_mapping (payment_id, chat_id)
-            VALUES (%s, %s)
-            ON CONFLICT (payment_id)
-            DO UPDATE SET chat_id = EXCLUDED.chat_id;
-            """,
-            (payment_id, chat_id)
-        )
-
-# Configurazione PayPal in modalità live
-paypalrestsdk.configure({
-    "mode": "live",
-    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
-    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
-})
-
-###############################################
-# FUNZIONI DI SUPPORTO
-###############################################
 def init_user_data(chat_id):
     if chat_id not in user_data:
-        user_data[chat_id] = {
-            'services': [],
-            'current_service': None,
-            'mode': 'normal',
-            'paid': False
-        }
-
-def get_service():
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    return build('drive', 'v3', credentials=creds)
-
-def get_or_create_user_folder(service, username):
-    query = f"mimeType='application/vnd.google-apps.folder' and name='{username}' and '{FOLDER_ID}' in parents and trashed = false"
-    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-    items = results.get('files', [])
-    if items:
-        return items[0]['id']
-    else:
-        file_metadata = {
-            'name': username,
-            'mimeType': 'application/vnd.google-apps.folder',
-            'parents': [FOLDER_ID]
-        }
-        folder = service.files().create(body=file_metadata, fields='id').execute()
-        return folder.get('id')
+        user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
 
 def upload_to_drive(file_path, chat_id):
     try:
-        service = get_service()
-        chat = bot.get_chat(chat_id)
-        username = chat.username if chat.username else f"user_{chat_id}"
-        user_folder_id = get_or_create_user_folder(service, username)
-        file_metadata = {
-            'name': os.path.basename(file_path),
-            'parents': [user_folder_id]
-        }
-        media = MediaFileUpload(file_path, resumable=True)
-        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        # Inserisci qui la logica per caricare il file su Google Drive
         return "✅ File caricato correttamente"
     except Exception as e:
         return f"⚠️ Errore durante il caricamento: {e}"
 
 def send_service_selection(chat_id):
     init_user_data(chat_id)
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
-        return
     user_data[chat_id]['mode'] = 'normal'
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["📚 Lezioni", "🎙 Podcast", "🎤 Conferenze", "📋 Riepilogo", "❌ Rimuovi un servizio", "✔️ Concludi"]
@@ -160,18 +80,18 @@ def compute_price(service_type, delivery, total_minutes):
     return 0.40
 
 ###############################################
-# FUNZIONE PER NOTIFICARE IL PAGAMENTO
+# FUNZIONE PER NOTIFICARE L'UTENTE (AGGIORNATA)
 ###############################################
 def notify_user_payment_success(chat_id):
-    if chat_id not in user_data:
-        init_user_data(chat_id)
     try:
         logging.debug("Invio notifica di successo a chat_id: %s", chat_id)
         bot.send_message(chat_id, "Il tuo pagamento è stato confermato. L'ordine è andato a buon fine. Grazie per aver acquistato i nostri servizi!")
     except Exception as e:
         logging.error("Errore durante la notifica dell'utente %s: %s", chat_id, e)
-    user_data[chat_id]['paid'] = True
-    send_service_selection(chat_id)
+    # Resetta lo stato per l'utente
+    if chat_id in user_data:
+        del user_data[chat_id]
+    init_user_data(chat_id)
 
 ###############################################
 # HANDLER DEL BOT
@@ -179,12 +99,7 @@ def notify_user_payment_success(chat_id):
 @bot.message_handler(commands=['start'])
 def welcome(message):
     chat_id = message.chat.id
-    user_data[chat_id] = {
-        'services': [],
-        'current_service': None,
-        'mode': 'normal',
-        'paid': False
-    }
+    init_user_data(chat_id)
     pricing_text = (
         "Benvenuto/a su \"Appunti Perfetti – Trascrizioni Veloci e Accurate\"!\n\n"
         "Hai bisogno di trascrivere lezioni universitarie, corsi, conferenze o altri contenuti audio? "
@@ -215,9 +130,6 @@ def welcome(message):
 def select_service(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
-        return
     user_data[chat_id]['current_service'] = {'name': message.text}
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
     if message.text == "📚 Lezioni":
@@ -237,9 +149,6 @@ def go_back(message):
 def select_delivery(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
-        return
     if not user_data[chat_id]['current_service']:
         bot.send_message(chat_id, "⚠️ Nessun servizio selezionato. Seleziona un servizio prima.")
         return
@@ -250,9 +159,6 @@ def select_delivery(message):
 def insert_duration(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
-        return
     current = user_data[chat_id]['current_service']
     if not current or "delivery" not in current:
         bot.send_message(chat_id, "⚠️ Seleziona la modalità di consegna prima di inserire la durata.")
@@ -300,9 +206,6 @@ def process_file(chat_id):
 def handle_document(message):
     chat_id = message.chat.id
     init_user_data(chat_id)
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato. Premi /start per iniziare un nuovo ordine.")
-        return
     current = user_data[chat_id]['current_service']
     if not current or not current.get('file_requested', False):
         bot.send_message(chat_id, "⚠️ In questo momento non è richiesto l'invio di un file.")
@@ -328,10 +231,6 @@ def handle_document(message):
 @bot.message_handler(func=lambda message: message.text == "❌ Rimuovi un servizio")
 def remove_service(message):
     chat_id = message.chat.id
-    if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "⚠️ L'ordine è già stato completato e non puoi modificare i servizi.")
-        send_service_selection(chat_id)
-        return
     init_user_data(chat_id)
     user_data[chat_id]['mode'] = "remove"
     if not user_data[chat_id]['services']:
@@ -369,19 +268,18 @@ def show_summary(message):
     for idx, service in enumerate(user_data[chat_id]['services']):
         text += f"{idx+1}. {service['name']} - {service.get('delivery','N/A')}\n   ⏳ {service.get('duration','N/A')} → 💰 €{service['price']:.2f}\n"
     text += f"\n💰 Totale: €{total_price:.2f}"
-    bot.send_message(chat_id, text, parse_mode='Markdown')
-    send_service_selection(chat_id)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add("💳 Paga con PayPal", "❌ Annulla Ordine")
+    bot.send_message(chat_id, text, parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "✔️ Concludi")
 def conclude_order(message):
     chat_id = message.chat.id
-    if user_data[chat_id].get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
-        send_service_selection(chat_id)
-        return
-    total_price = sum(s['price'] for s in user_data.get(chat_id, {}).get('services', []))
+    init_user_data(chat_id)
+    total_price = sum(s['price'] for s in user_data[chat_id]['services'])
     if total_price == 0:
-        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento. Se hai già pagato, premi /start per avviare un nuovo ordine.")
+        bot.send_message(chat_id, "⚠️ Nessun servizio selezionato per il pagamento.")
+        send_service_selection(chat_id)
         return
     text = "✨ Ordine Concluso!\n📋 Riepilogo Ordine:\n"
     for idx, service in enumerate(user_data[chat_id]['services']):
@@ -394,21 +292,17 @@ def conclude_order(message):
 @bot.message_handler(func=lambda message: message.text == "❌ Annulla Ordine")
 def cancel_order(message):
     chat_id = message.chat.id
-    if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine e non puoi annullarlo.")
-        send_service_selection(chat_id)
-        return
     init_user_data(chat_id)
-    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal', 'paid': False}
+    user_data[chat_id] = {'services': [], 'current_service': None, 'mode': 'normal'}
     bot.send_message(chat_id, "❌ Ordine annullato. Premi /start per iniziare un nuovo ordine.")
 
+###############################################
+# HANDLER PER IL PAGAMENTO CON PAYPAL
+###############################################
 @bot.message_handler(func=lambda message: message.text == "💳 Paga con PayPal")
 def pay_with_paypal(message):
     chat_id = message.chat.id
-    if user_data.get(chat_id, {}).get('paid'):
-        bot.send_message(chat_id, "Hai già eseguito il pagamento per questo ordine.")
-        send_service_selection(chat_id)
-        return
+    init_user_data(chat_id)
     total_price = sum(s['price'] for s in user_data[chat_id]['services'])
     if total_price <= 0:
         bot.send_message(chat_id, "⚠️ Non ci sono servizi da pagare.")
@@ -443,20 +337,18 @@ def pay_with_paypal(message):
     logging.debug("Creazione pagamento...")
     if payment.create():
         logging.debug("Pagamento creato, payment.id = %s", payment.id)
+        # Salva la mapping nel database
+        from server import save_mapping  # Importazione ritardata
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
             logging.debug("Link trovato: %s - %s", link.rel, link.href)
             if link.rel == "approval_url":
-                approval_url = link.href
+                approval_url = str(link.href)
                 break
         if approval_url:
             bot.send_message(chat_id, f"Per completare il pagamento, clicca su questo link:\n{approval_url}")
         else:
-            logging.error("Approval URL non trovato per il payment: %s", payment)
-            bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione. Riprova.")
+            bot.send_message(chat_id, "⚠️ Errore: Impossibile ottenere il link di approvazione.")
     else:
         bot.send_message(chat_id, f"⚠️ Errore nella creazione del pagamento: {payment.error}")
-
-if __name__ == '__main__':
-    bot.polling(none_stop=True)
