@@ -128,4 +128,6 @@ def paypal_webhook_paypal():
     return paypal_webhook()
 
 if __name__ == '__main__':
-    app.run()
+    import os
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
