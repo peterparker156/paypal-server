@@ -1,56 +1,3 @@
-from flask import Flask, request, jsonify
-import paypalrestsdk
-import logging
-import os
-import psycopg2
-
-logging.basicConfig(level=logging.DEBUG)
-app = Flask(__name__)
-
-# Leggi la stringa di connessione dal database dalle variabili d'ambiente
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise Exception("DATABASE_URL non è impostato")
-
-# Crea la connessione al database PostgreSQL
-conn = psycopg2.connect(DATABASE_URL)
-conn.autocommit = True
-
-# Funzioni per gestire la mapping nel database (chat_id come stringa)
-def save_mapping(payment_id, chat_id):
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO payment_mapping (payment_id, chat_id)
-            VALUES (%s, %s)
-            ON CONFLICT (payment_id)
-            DO UPDATE SET chat_id = EXCLUDED.chat_id;
-            """,
-            (payment_id, chat_id)
-        )
-
-def get_mapping(payment_id):
-    with conn.cursor() as cur:
-        cur.execute("SELECT chat_id FROM payment_mapping WHERE payment_id = %s", (payment_id,))
-        result = cur.fetchone()
-        return result[0] if result else None
-
-# Configura il PayPal SDK in modalità live
-paypalrestsdk.configure({
-    "mode": "live",
-    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
-    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
-})
-
-@app.route('/', methods=['POST'])
-def handle_root_post():
-    logging.debug("POST received at root: %s", request.get_data())
-    return "OK", 200
-
-@app.route('/', methods=['GET'])
-def home():
-    return "Server attivo!"
-
 @app.route('/payment/execute', methods=['GET'])
 def execute_payment():
     payment_id = request.args.get('paymentId')
@@ -76,7 +23,7 @@ def execute_payment():
                 custom_value = transactions[0].get("custom")
                 logging.debug("Valore custom trovato: %s", custom_value)
                 if custom_value:
-                    chat_id = custom_value  # trattato come stringa
+                    chat_id = custom_value  # salvato come stringa
                 else:
                     chat_id = get_mapping(payment.id)
                     if chat_id:
@@ -89,7 +36,8 @@ def execute_payment():
             logging.error("Errore nel recupero di chat_id: %s", e)
         if chat_id:
             from bot import notify_user_payment_success  # Importazione ritardata per evitare cicli
-            notify_user_payment_success(chat_id)
+            # Convertiamo il chat_id in intero prima di passarlo, così corrisponde alla chiave in user_data
+            notify_user_payment_success(int(chat_id))
         else:
             logging.warning("Nessun chat_id trovato per payment_id: %s", payment_id)
         return '''
@@ -110,10 +58,6 @@ def execute_payment():
     else:
         logging.error("Errore durante l'esecuzione del pagamento: %s", payment.error)
         return f"Errore durante l'esecuzione del pagamento: {payment.error}", 500
-
-@app.route('/payment/cancel', methods=['GET'])
-def cancel_payment():
-    return "Pagamento annullato", 200
 
 @app.route('/webhook', methods=['POST'])
 def paypal_webhook():
@@ -146,7 +90,8 @@ def paypal_webhook():
                             logging.error("Campo custom mancante e mapping non trovato per payment_id: %s", payment_id)
                     if chat_id:
                         from bot import notify_user_payment_success
-                        notify_user_payment_success(chat_id)
+                        # Convertiamo il chat_id in intero per garantire la corrispondenza con user_data
+                        notify_user_payment_success(int(chat_id))
                 else:
                     logging.error("Nessuna transazione trovata nel webhook per payment_id: %s", payment_id)
             else:
@@ -160,10 +105,3 @@ def paypal_webhook():
         
     return jsonify({'status': 'success'}), 200
 
-@app.route('/webhook/paypal', methods=['POST'])
-@app.route('/webhook/paypal/', methods=['POST'])
-def paypal_webhook_paypal():
-    logging.debug("Webhook /webhook/paypal ricevuto")
-    return paypal_webhook()
-
-# NOTA: Il blocco di esecuzione diretto è stato rimosso.
