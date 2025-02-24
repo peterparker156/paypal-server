@@ -9,7 +9,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 def send_telegram_notification(chat_id, text):
-    # Recupera il token del bot dall'ambiente o inseriscilo direttamente
+    # Recupera il token del bot dall'ambiente (impostalo come TELEGRAM_BOT_TOKEN)
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         logging.error("TELEGRAM_BOT_TOKEN non impostato")
@@ -73,14 +73,13 @@ def execute_payment():
                 if chat_id:
                     logging.debug("chat_id recuperato dal DB: %s", chat_id)
                 else:
-                    logging.error("Mapping non trovato per payment_id: %s", payment.id)
+                    logging.error("Mapping non trovato per payment.id: %s", payment.id)
         else:
             logging.error("Nessuna transazione trovata nel payment object.")
     except Exception as e:
         logging.error("Errore nel recupero di chat_id: %s", e)
 
     if chat_id:
-        # Invia notifica direttamente via Telegram
         send_telegram_notification(chat_id, 
             "Il tuo pagamento è stato completato con successo! 🎉\n"
             "L'ordine è stato concluso. Per iniziare un nuovo ordine, premi /start."
