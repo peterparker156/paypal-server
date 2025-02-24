@@ -1,7 +1,8 @@
-import paypalrestsdk
 import logging
 import threading
 from telebot import TeleBot, types
+import paypalrestsdk
+from common import save_mapping
 
 # Token reale del bot
 TOKEN = "7745039187:AAEhlxK64Js4PsnXUlIK7Bbdl5rObgjbFbg"
@@ -177,7 +178,8 @@ def process_file(chat_id):
     downloaded_file = bot.download_file(file_info.file_path)
     with open(file_path, "wb") as new_file:
         new_file.write(downloaded_file)
-    result = "✅ File caricato correttamente"  # Sostituisci con la logica di upload se presente
+    # Sostituisci con la logica di upload, se necessario
+    result = "✅ File caricato correttamente"
     if result.startswith("✅"):
         current["file"] = file_doc.file_name
         bot.send_message(chat_id, "✅ File caricato correttamente!")
@@ -356,7 +358,6 @@ def pay_with_paypal(message):
         debug_id = getattr(payment, "debug_id", None)
         if debug_id:
             logging.debug("PayPal debug_id: %s", debug_id)
-        from common import save_mapping
         save_mapping(payment.id, str(chat_id))
         approval_url = None
         for link in payment.links:
@@ -377,3 +378,4 @@ def pay_with_paypal(message):
 
 if __name__ == '__main__':
     bot.polling(none_stop=True)
+
