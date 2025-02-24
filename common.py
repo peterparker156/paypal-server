@@ -31,14 +31,12 @@ def get_mapping(payment_id):
         result = cur.fetchone()
         return result[0] if result else None
 
-# Configurazione del PayPal SDK (modifica "mode" in "sandbox" per testare)
-paypalrestsdk.configure({
-    "mode": "live",  # Usa "sandbox" per test
-    "client_id": "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi",
-    "client_secret": "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg"
-})
+# Leggi le credenziali da variabili d'ambiente se presenti, altrimenti usa valori di default
+client_id = os.getenv("PAYPAL_CLIENT_ID", "ASG04kwKhzR0Bn4s6Bo2N86aRJOwA1hDG3vlHdiJ_i5geeeWLysMiW40_c7At5yOe0z3obNT_4VMkXvi")
+client_secret = os.getenv("PAYPAL_CLIENT_SECRET", "EMNtcx_GC4M0yGpVKrRKpRmub26OO75BU6oI9hMmc2SQM_z-spPtuH1sZCBme7KCTjhGiEuA-EO21gDg")
 
-# Funzione placeholder per notificare il successo del pagamento.
-# Questa funzione verrà "collegata" al bot in bot.py.
-def notify_user_payment_success(chat_id):
-    logging.info("Notifica di pagamento per chat_id %s (funzione non ancora collegata)", chat_id)
+paypalrestsdk.configure({
+    "mode": os.getenv("PAYPAL_MODE", "live"),  # "live" o "sandbox"
+    "client_id": client_id,
+    "client_secret": client_secret
+})
